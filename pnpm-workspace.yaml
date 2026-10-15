@@ -1,0 +1,8 @@
+# pnpm 11 settings.
+# pnpm asks for an explicit decision on every dependency that ships build
+# scripts. `esbuild` needs its postinstall (drizzle-kit, tsx and vite all rely
+# on it); `bufferutil` is an optional native addon for `ws` and is not needed.
+
+allowBuilds:
+  esbuild: true
+  bufferutil: false

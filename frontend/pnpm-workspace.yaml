@@ -1,0 +1,8 @@
+# pnpm 11 settings.
+# pnpm asks for an explicit decision on every dependency that ships build
+# scripts. Both of these need their postinstall: `@swc/core` backs the React
+# SWC transform, `esbuild` backs vite's bundling and dev server.
+
+allowBuilds:
+  '@swc/core': true
+  esbuild: true

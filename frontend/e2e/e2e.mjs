@@ -8,10 +8,19 @@
  *
  * Uses the installed Edge (channel: 'msedge') so no browser download is needed.
  *
- * Serve a build first (over https, so the secure-context paths are exercised):
- *   pnpm cert && pnpm build && pnpm preview
- * then point this at it:
- *   APP_URL=https://<lan-ip>:4173/ pnpm test:e2e
+ * Needs two origins, because they prove different things:
+ *
+ *   APP_URL     an https build, so the secure-context paths run for real.
+ *               pnpm cert && pnpm build && pnpm preview
+ *               APP_URL=https://<lan-ip>:4173/ pnpm test:e2e
+ *
+ *   NOTIFY_URL  a plain http server on loopback. Chrome treats 127.0.0.1 as a
+ *               secure context, and only there can the service worker register:
+ *               an untrusted certificate blocks it outright. Without this the
+ *               notification path has no coverage.
+ *               python -m http.server 4180 --directory dist
+ *
+ * The notification section is skipped cleanly when NOTIFY_URL is unreachable.
  */
 import { chromium, devices } from 'playwright-core';
 
@@ -471,6 +480,80 @@ try {
     !!persisted && persisted.includes('E2E 新建'),
     String(persisted).slice(0, 80)
   );
+
+  // ---- notification channel over a trustworthy origin -------------------
+  // Chrome treats http://127.0.0.1 as a secure context, which makes this the
+  // only place the service worker can register without a real certificate. The
+  // HTTPS run above cannot: an untrusted certificate blocks registration
+  // outright, so the app's notification path had no coverage at all.
+  const notifyUrl = process.env.NOTIFY_URL || 'http://127.0.0.1:4180/';
+  const notifyContext = await browser.newContext({
+    ...devices['Pixel 5'],
+    permissions: ['notifications'],
+  });
+  const notifyPage = await notifyContext.newPage();
+
+  try {
+    let reachable = true;
+    try {
+      await notifyPage.goto(notifyUrl, { waitUntil: 'load', timeout: 20_000 });
+    } catch {
+      reachable = false;
+    }
+
+    if (!reachable) {
+      console.log(
+        `      (notification checks skipped: ${notifyUrl} is not serving — see the file header)`
+      );
+    } else {
+      await notifyPage.waitForSelector('#root > *', { timeout: 15_000 });
+
+      check(
+        'a loopback origin counts as a secure context',
+        await notifyPage.evaluate(() => window.isSecureContext === true)
+      );
+      check(
+        'notifications are permitted for this session',
+        await notifyPage.evaluate(() => Notification.permission === 'granted')
+      );
+
+      // The app registers the worker on the first user gesture.
+      await notifyPage.mouse.click(5, 5);
+      const registered = await notifyPage.evaluate(async () => {
+        try {
+          await Promise.race([
+            navigator.serviceWorker.ready,
+            new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 10_000)),
+          ]);
+          return true;
+        } catch {
+          return false;
+        }
+      });
+      check('the notification service worker registers', registered);
+
+      await notifyPage.evaluate(alarm => {
+        localStorage.removeItem('active_ring_v1');
+        localStorage.setItem('alarms_v1', JSON.stringify([alarm]));
+      }, makeAlarm({ id: 'e2e-notify', ...dueTime }));
+      await notifyPage.reload({ waitUntil: 'load' });
+      await notifyPage.waitForSelector('text=开始任务', { timeout: 20_000 });
+      await notifyPage.waitForTimeout(2000);
+
+      const shown = await notifyPage.evaluate(async () => {
+        const registration = await navigator.serviceWorker.ready;
+        const list = await registration.getNotifications();
+        return list.map(notification => ({ title: notification.title, tag: notification.tag }));
+      });
+      check(
+        'the alarm raises a system notification',
+        shown.some(notification => notification.tag === 'alarm-e2e-notify'),
+        JSON.stringify(shown)
+      );
+    }
+  } finally {
+    await notifyContext.close();
+  }
 } catch (error) {
   failures.push(`exception: ${error.message}`);
   console.log(`  FAIL exception — ${error.message}`);

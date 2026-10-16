@@ -28,6 +28,7 @@ export interface EnvironmentProbes {
   deviceMotion: boolean;
   wakeLock: boolean;
   vibrate: boolean;
+  tone: boolean;
   notification: NotifyPermission;
 }
 
@@ -41,8 +42,17 @@ export function readProbes(): EnvironmentProbes {
     deviceMotion: isDeviceMotionSupported(),
     wakeLock: !!nav && 'wakeLock' in nav,
     vibrate: !!nav && typeof nav.vibrate === 'function',
+    tone: !!win && typeof win.Audio === 'function',
     notification: notificationPermission(),
   };
+}
+
+/** Which alarm mechanisms this device can actually use. */
+function describeOutput(p: EnvironmentProbes): string {
+  if (p.tone && p.vibrate) return '响铃 + 震动';
+  if (p.tone) return '仅响铃（本机不支持震动）';
+  if (p.vibrate) return '仅震动（浏览器不能播放声音）';
+  return '都不可用，只剩系统通知';
 }
 
 export function evaluateEnvironment(p: EnvironmentProbes): Capability[] {
@@ -64,17 +74,20 @@ export function evaluateEnvironment(p: EnvironmentProbes): Capability[] {
       hint: '没有传感器时只能用点击模拟',
     },
     {
-      id: 'vibration',
-      label: '震动输出',
+      id: 'alarm-output',
+      label: '闹钟输出',
       level: 'critical',
-      ok: p.vibrate,
-      detail: p.vibrate ? '可用' : '浏览器不支持震动',
-      hint: '这是现在唯一的闹钟通道。iOS Safari 完全没有它，部分安卓机需要开启系统震动',
+      ok: p.tone || p.vibrate,
+      detail: describeOutput(p),
+      // Media volume caps the audible channel from below, and the Vibration
+      // API forbids vibrating while the document is hidden — so on a locked
+      // phone the notification is the only thing left.
+      hint: '响铃受媒体音量限制；手机锁屏后震动不生效，只有通知还能提醒你',
     },
     {
       id: 'notification',
       label: '系统通知',
-      level: 'recommended',
+      level: 'critical',
       ok: p.notification === 'granted',
       detail:
         p.notification === 'granted'
@@ -84,7 +97,9 @@ export function evaluateEnvironment(p: EnvironmentProbes): Capability[] {
           : p.notification === 'unsupported'
           ? '浏览器不支持'
           : '尚未授权',
-      hint: '授权后闹钟在后台也能提醒，是震动之外唯一的兜底',
+      // The Vibration API spec forbids vibrating while the document is hidden,
+      // so an alarm that fires with the phone asleep has no other channel.
+      hint: '手机锁屏或熄屏时，通知是唯一还能提醒你的通道，请务必授权',
     },
     {
       id: 'wake-lock',

@@ -27,6 +27,7 @@ const healthy: EnvironmentProbes = {
   deviceMotion: true,
   wakeLock: true,
   vibrate: true,
+  tone: true,
   notification: 'granted',
 };
 
@@ -43,7 +44,7 @@ check('every capability is reported', () => {
   assert.deepEqual(ids, [
     'secure-context',
     'device-motion',
-    'vibration',
+    'alarm-output',
     'notification',
     'wake-lock',
   ]);
@@ -73,19 +74,39 @@ check('a missing accelerometer is critical (the tasks would never advance)', () 
   assert.equal(summarizeEnvironment(evaluateEnvironment(probes)).ok, false);
 });
 
-check('missing vibration is critical (the only alarm channel there is)', () => {
-  const probes = { ...healthy, vibrate: false };
-  assert.equal(find('vibration', probes).level, 'critical');
+check('losing both alarm channels is critical', () => {
+  const probes = { ...healthy, vibrate: false, tone: false };
+  assert.equal(find('alarm-output', probes).level, 'critical');
   assert.equal(summarizeEnvironment(evaluateEnvironment(probes)).ok, false);
 });
 
-check('a denied notification is not critical', () => {
+check('one working channel is enough, and the detail says which', () => {
+  const both = find('alarm-output', healthy);
+  assert.equal(both.ok, true);
+  assert.equal(both.detail, '响铃 + 震动');
+
+  const soundOnly = find('alarm-output', { ...healthy, vibrate: false });
+  assert.equal(soundOnly.ok, true, 'sound alone still alarms');
+  assert.ok(soundOnly.detail.includes('仅响铃'), soundOnly.detail);
+
+  const buzzOnly = find('alarm-output', { ...healthy, tone: false });
+  assert.equal(buzzOnly.ok, true, 'vibration alone still alarms');
+  assert.ok(buzzOnly.detail.includes('仅震动'), buzzOnly.detail);
+});
+
+check('a denied notification is critical (the only channel on a locked phone)', () => {
+  // The Vibration API forbids vibrating while the document is hidden, so with
+  // the screen off a notification is all there is.
   const probes = { ...healthy, notification: 'denied' as const };
   const cap = find('notification', probes);
   assert.equal(cap.ok, false);
-  assert.equal(cap.level, 'recommended');
-  // Everything critical still passes, so the app is usable.
-  assert.equal(summarizeEnvironment(evaluateEnvironment(probes)).ok, true);
+  assert.equal(cap.level, 'critical');
+  assert.equal(summarizeEnvironment(evaluateEnvironment(probes)).ok, false);
+});
+
+check('the alarm-output hint warns about the locked screen', () => {
+  const hint = find('alarm-output', healthy).hint ?? '';
+  assert.ok(hint.includes('锁屏'), hint);
 });
 
 check('an unauthorised notification says so rather than claiming denial', () => {
@@ -109,6 +130,7 @@ check('the summary lists precisely the failing capabilities', () => {
     deviceMotion: false,
     wakeLock: false,
     vibrate: false,
+    tone: false,
     notification: 'denied',
   };
   const summary = summarizeEnvironment(evaluateEnvironment(probes));

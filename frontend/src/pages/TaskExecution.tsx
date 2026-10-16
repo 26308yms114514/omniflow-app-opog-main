@@ -4,7 +4,7 @@ import { useAlarms } from '@/hooks/use-alarms';
 import { useWakeLock } from '@/hooks/use-wake-lock';
 import { AlarmSession, TaskType, DEFAULT_CONFIG, formatClock } from '@/types/alarm';
 import { TASK_LABELS, TASK_ICONS } from '@/types/alarm';
-import { getVibrationAlarm } from '@/lib/vibration-alarm';
+import { getAlarmOutput } from '@/lib/alarm-output';
 import { endRing, getActiveRing } from '@/lib/active-ring';
 import { SNOOZE_MINUTES, boostMultiplier, scheduleSnooze } from '@/lib/snooze';
 import {
@@ -115,7 +115,7 @@ export default function TaskExecution() {
   const stepModeRef = useRef(false);
   const stepTargetRef = useRef(10);
 
-  const buzzerRef = useRef(getVibrationAlarm());
+  const outputRef = useRef(getAlarmOutput());
 
   // Every fallback comes from DEFAULT_CONFIG rather than a literal: repeating
   // the numbers here is how the defaults drifted apart in the first place.
@@ -208,29 +208,45 @@ export default function TaskExecution() {
   }, [taskLocked]);
 
   // --- the alarm channel -------------------------------------------------
-  // Vibration, not sound: the Web Audio siren produced nothing on a real
-  // Android phone. The alarm has to keep going until the task is finished, so
-  // it lives here rather than inside a single phase.
+  // Sound and vibration together. The alarm has to keep going until the task
+  // is finished, so it lives here rather than inside a single phase.
   const startAlarm = useCallback(() => {
-    const buzzer = buzzerRef.current;
-    buzzer.setIntensity(intensityRef.current);
-    const running = buzzer.start();
-    setAlarmOn(running);
-    return running;
+    const output = outputRef.current;
+    output.setIntensity(intensityRef.current);
+    const channels = output.start();
+    const accepted = channels.tone || channels.vibration;
+    setAlarmOn(accepted);
+    return accepted;
   }, []);
 
   useEffect(() => {
-    // Try immediately: navigating here required a tap, so the platform may
-    // already allow vibration.
+    // Try immediately: navigating here required a tap, so both the audio
+    // element and vibration may already be permitted.
     startAlarm();
     return () => {
-      // While an alarm ring is in force the scheduler owns the buzzer. Leaving
+      // While an alarm ring is in force the scheduler owns the output. Leaving
       // this screen — the Android back gesture, most likely — must not silence
       // the alarm, so only a manual test run stops it here.
-      if (!getActiveRing()) buzzerRef.current.stop();
+      if (!getActiveRing()) outputRef.current.stop();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  /**
+   * Keep the "点击开启" prompt honest.
+   *
+   * Both channels accept the call optimistically and only report failure
+   * later — a blocked `play()` rejects asynchronously — so a single read at
+   * start time said "alarming" while nothing was happening. That silent state
+   * is exactly what wasted the first phone test.
+   */
+  useEffect(() => {
+    if (phase !== 'ringing') return;
+    const sync = () => setAlarmOn(outputRef.current.isRunning);
+    sync();
+    const timer = setInterval(sync, 1000);
+    return () => clearInterval(timer);
+  }, [phase]);
 
   // --- device motion -----------------------------------------------------
   useEffect(() => {
@@ -306,7 +322,7 @@ export default function TaskExecution() {
     if (interruptTimerRef.current) clearTimeout(interruptTimerRef.current);
     // Finishing the task is the one legitimate way to end the alarm.
     endRing();
-    buzzerRef.current.stop();
+    outputRef.current.stop();
     setAlarmOn(false);
     // Hand the browser chrome back: the task is over, the user may want to
     // leave the page.
@@ -371,7 +387,7 @@ export default function TaskExecution() {
     // under StrictMode's double-invoked reducers.
     const nextBoost = Math.min(intensityRef.current + 0.2, 2);
     intensityRef.current = nextBoost;
-    buzzerRef.current.setIntensity(nextBoost);
+    outputRef.current.setIntensity(nextBoost);
     setIntensityLevel(nextBoost);
     // Haptic penalty: felt even with the phone under a pillow.
     vibrate([200, 100, 200]);
@@ -534,7 +550,7 @@ export default function TaskExecution() {
     const boost = alarm.config.snoozeDifficultyBoost;
     scheduleSnooze(alarm.id, boost);
     endRing();
-    buzzerRef.current.stop();
+    outputRef.current.stop();
     setAlarmOn(false);
     toast.success(`已推迟 ${SNOOZE_MINUTES} 分钟，下次难度 +${boost}%`);
     navigate('/');
@@ -638,7 +654,7 @@ export default function TaskExecution() {
             onClick={() => startAlarm()}
             className="w-full max-w-xs py-3 rounded-2xl border border-primary text-primary text-sm font-semibold"
           >
-            📳 点击开启震动
+            🔔 点击开启响铃
           </button>
         )}
         <button
@@ -669,10 +685,10 @@ export default function TaskExecution() {
           <span className="text-5xl animate-bounce">⚠️</span>
         </div>
         <h1 className="text-3xl font-bold text-red-400">动作中断！</h1>
-        <p className="text-red-300">进度已清零，震动已增强</p>
+        <p className="text-red-300">进度已清零，响铃更响、震动更强</p>
         <div className="flex items-center gap-2 bg-red-900/50 rounded-xl px-4 py-2">
           <span className="text-red-400">📳</span>
-          <span className="text-red-300 text-sm">震动强度 +{Math.round((intensityLevel - 1) * 100)}%</span>
+          <span className="text-red-300 text-sm">强度 +{Math.round((intensityLevel - 1) * 100)}%</span>
         </div>
         <p className="text-red-400/70 text-sm">即将自动恢复...</p>
       </div>
@@ -723,7 +739,7 @@ export default function TaskExecution() {
               : '请保持动作'}
           </p>
           <p className="text-xs text-muted-foreground mt-1">
-            中断 {interruptCount} 次 | 震动强度 +{Math.round((intensityLevel - 1) * 100)}%
+            中断 {interruptCount} 次 | 强度 +{Math.round((intensityLevel - 1) * 100)}%
             {boostPercent > 0 ? ` | 难度 +${boostPercent}%` : ''}
           </p>
         </div>

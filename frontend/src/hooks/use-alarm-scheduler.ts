@@ -4,7 +4,7 @@ import { useAlarms } from './use-alarms';
 import type { Alarm } from '@/types/alarm';
 import { formatClock } from '@/types/alarm';
 import { dueAlarms, occurrenceOn, ringKey } from '@/lib/next-alarm';
-import { getVibrationAlarm } from '@/lib/vibration-alarm';
+import { getAlarmOutput } from '@/lib/alarm-output';
 import { vibrate } from '@/lib/motion';
 import {
   endRing,
@@ -87,15 +87,16 @@ export function useAlarmScheduler(): void {
     // The alarm may have been deleted while it was ringing; never chase a ghost.
     if (!alarmsRef.current.some(a => a.id === ring.alarmId)) {
       endRing();
-      getVibrationAlarm().stop();
+      getAlarmOutput().stop();
       return;
     }
 
     navigate(target);
   }, [location.pathname, navigate]);
 
-  // Register the notification worker (and ask for the permission) on the very
-  // first user gesture, so an alarm hours later can still reach the user.
+  // Register the notification worker, prime the audible alarm channel and ask
+  // for the permission — all on the very first user gesture, because none of
+  // the three can be done later.
   useEffect(() => {
     let handled = false;
 
@@ -106,6 +107,10 @@ export function useAlarmScheduler(): void {
       window.removeEventListener('keydown', onFirstGesture);
 
       await ensureServiceWorker();
+
+      // An <audio> element may only be primed from inside a gesture; this is
+      // the one chance to make an alarm hours from now audible.
+      await getAlarmOutput().unlock();
 
       const hasEnabledAlarm = alarmsRef.current.some(a => a.enabled);
       if (hasEnabledAlarm && notificationPermission() === 'default') {
@@ -125,11 +130,11 @@ export function useAlarmScheduler(): void {
     const beginRing = async (alarm: Alarm, boostPercent = 0) => {
       startRing(alarm.id, Date.now(), boostPercent);
 
-      // Start buzzing first: if navigation is somehow blocked the alarm is
-      // still going. Vibration needs user activation, which the scheduler
-      // cannot supply, so a refusal here is expected — TaskExecution retries
-      // from inside the 开始任务 tap and the notification covers the rest.
-      getVibrationAlarm().start();
+      // Start the alarm first: if navigation is somehow blocked it is still
+      // going. Both channels may be refused here for want of a gesture, which
+      // is why TaskExecution retries from inside the 开始任务 tap and why the
+      // notification is a channel in its own right.
+      getAlarmOutput().start();
       vibrate([300, 150, 300, 150, 300]);
 
       void showAlarmNotification(
@@ -147,8 +152,9 @@ export function useAlarmScheduler(): void {
 
     /**
      * Keep an in-force ring alive: re-route the user back to the task if they
-     * navigated away, make sure the buzzer is actually going (this is what
-     * restores it after a reload), and retire the ring when it times out.
+     * navigated away, make sure the alarm is actually sounding (this is what
+     * restores it after a reload, and what lets it recover once the user
+     * finally touches the page), and retire the ring when it times out.
      */
     const enforceRing = async (now: Date) => {
       const ring = readRing();
@@ -156,7 +162,7 @@ export function useAlarmScheduler(): void {
 
       if (isExpired(ring, now.getTime())) {
         endRing();
-        getVibrationAlarm().stop();
+        getAlarmOutput().stop();
         return;
       }
 
@@ -164,15 +170,15 @@ export function useAlarmScheduler(): void {
       // otherwise the user is trapped on a task screen that says 闹钟不存在.
       if (!alarmsRef.current.some(a => a.id === ring.alarmId)) {
         endRing();
-        getVibrationAlarm().stop();
+        getAlarmOutput().stop();
         return;
       }
 
       const target = `/task/${ring.alarmId}`;
       if (pathRef.current !== target) navigate(target);
 
-      const buzzer = getVibrationAlarm();
-      if (!buzzer.isRunning) buzzer.start();
+      const output = getAlarmOutput();
+      if (!output.isRunning) output.start();
     };
 
     const check = () => {

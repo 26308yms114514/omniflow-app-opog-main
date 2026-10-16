@@ -10,7 +10,8 @@ import { useAlarms } from '@/hooks/use-alarms';
 import { useNextAlarm } from '@/hooks/use-next-alarm';
 import { describeCountdown } from '@/lib/next-alarm';
 import { formatClock } from '@/types/alarm';
-import { getVibrationAlarm } from '@/lib/vibration-alarm';
+import { getAlarmOutput } from '@/lib/alarm-output';
+import { notificationPermission, requestNotificationPermission } from '@/lib/notify';
 
 export default function Index() {
   const navigate = useNavigate();
@@ -18,6 +19,7 @@ export default function Index() {
   const next = useNextAlarm(alarms);
   const [testing, setTesting] = useState(false);
   const testTimerRef = useRef<number | null>(null);
+  const [notifyPermission, setNotifyPermission] = useState(notificationPermission);
 
   const total = sessions.length;
   const successful = sessions.filter(s => s.success).length;
@@ -27,34 +29,54 @@ export default function Index() {
   useEffect(() => {
     return () => {
       if (testTimerRef.current) window.clearTimeout(testTimerRef.current);
-      // Never leave a test buzz running after the page goes away.
-      getVibrationAlarm().stop();
+      // Never leave a test alarm running after the page goes away.
+      getAlarmOutput().stop();
     };
   }, []);
 
+  // Permission can be granted while the page sits in the background.
+  useEffect(() => {
+    const refresh = () => setNotifyPermission(notificationPermission());
+    refresh();
+    document.addEventListener('visibilitychange', refresh);
+    return () => document.removeEventListener('visibilitychange', refresh);
+  }, []);
+
+  const askForNotifications = async () => {
+    const result = await requestNotificationPermission();
+    setNotifyPermission(result);
+    if (result !== 'granted') toast.error('没有通知权限，锁屏后闹钟可能叫不醒你');
+  };
+
   /**
-   * Buzzes for a few seconds so the user can feel whether the alarm channel
-   * works on their device at all — which is exactly what was impossible to
-   * tell when the app relied on a siren that stayed silent.
+   * Sounds and buzzes for a few seconds so the user can tell whether the alarm
+   * channel works on their device at all.
+   *
+   * This doubles as the audio unlock: the tap here is the gesture that lets an
+   * alarm hours later play, and the report says which channels actually fired
+   * rather than assuming both did — the silent failure this exists to catch.
    */
-  const handleTestRing = () => {
-    const buzzer = getVibrationAlarm();
-    buzzer.setIntensity(1);
-    const started = buzzer.start();
-    if (!started) {
-      toast.error(
-        buzzer.isSupported
-          ? '设备拒绝了震动，请检查系统震动设置'
-          : '这个浏览器不支持震动'
-      );
+  const handleTestRing = async () => {
+    const output = getAlarmOutput();
+    await output.unlock();
+    output.setIntensity(1);
+    const channels = output.start();
+
+    if (!channels.tone && !channels.vibration) {
+      toast.error('这个浏览器既不支持播放声音，也不支持震动');
       return;
     }
+    const missing = !channels.vibration ? '（设备不支持震动）' : '';
+
     setTesting(true);
     if (testTimerRef.current) window.clearTimeout(testTimerRef.current);
     testTimerRef.current = window.setTimeout(() => {
-      buzzer.stop();
+      output.stop();
       setTesting(false);
     }, 3000);
+
+    if (channels.tone) return;
+    toast.warning(`没听到声音吗？请把媒体音量调大 ${missing}`);
   };
 
 
@@ -134,17 +156,34 @@ export default function Index() {
                 className="shrink-0 flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-xl border border-border hover:border-primary/50 transition-colors cursor-pointer"
               >
                 <Vibrate className="w-3.5 h-3.5" />
-                {testing ? '震动中' : '试震动'}
+                {testing ? '响铃中' : '试响铃'}
               </button>
             </div>
-            <p className="text-[11px] text-muted-foreground mt-3 leading-relaxed">
-              闹钟在页面打开时触发。安卓请用浏览器菜单「添加到主屏幕」，并保持后台运行。
-            </p>
+            {notifyPermission === 'granted' ? (
+              <p className="text-[11px] text-muted-foreground mt-3 leading-relaxed">
+                屏幕亮着时用震动提醒；手机锁屏后震动不会生效（浏览器限制），
+                改由系统通知提醒，请保持页面在后台运行。
+              </p>
+            ) : (
+              <div className="mt-3 rounded-xl border border-amber-500/40 bg-amber-500/5 p-3">
+                <p className="text-[11px] text-amber-700 leading-relaxed">
+                  <strong>还没有通知权限。</strong>
+                  手机锁屏后浏览器不会震动，这时通知是唯一能提醒你的通道——
+                  现在这个闹钟有可能叫不醒你。
+                </p>
+                <button
+                  onClick={() => void askForNotifications()}
+                  className="mt-2 w-full rounded-lg bg-amber-500 text-white text-xs font-semibold py-2 cursor-pointer"
+                >
+                  开启通知提醒
+                </button>
+              </div>
+            )}
           </div>
         )}
 
         {/* Capability checklist — the fastest way to diagnose a phone that
-            silently refuses to play sound or read the accelerometer. */}
+            silently refuses to buzz or read the accelerometer. */}
         <EnvironmentCheck />
 
         {/* Quick Stats */}

@@ -205,7 +205,7 @@ try {
 
   check('the seeded alarm is listed', await page.getByText('下次提醒').first().isVisible());
 
-  const tryListen = page.getByRole('button', { name: /试震动/ }).first();
+  const tryListen = page.getByRole('button', { name: /试响铃/ }).first();
   check('the test-sound button is offered once an alarm exists', (await tryListen.count()) > 0);
 
   await page.goto(`${HASH}#/task/e2e-alarm`, { waitUntil: 'load' });
@@ -224,6 +224,37 @@ try {
     'shaking advances the progress bar',
     shakePercent > 10,
     `progress was ${shakePercent}%`
+  );
+
+  // The first phone test reported "no sound" and nothing said why. Playing the
+  // clip here makes the audio channel observable: a malformed WAV header or a
+  // blocked play() shows up as a stalled currentTime rather than silence.
+  const audio = await page.evaluate(() => {
+    const element = document.querySelector('audio');
+    if (!element) return { present: false };
+    return {
+      present: true,
+      paused: element.paused,
+      currentTime: element.currentTime,
+      duration: Number.isFinite(element.duration) ? Math.round(element.duration * 10) / 10 : -1,
+      source: (element.currentSrc || element.src || '').slice(0, 32),
+    };
+  });
+  console.log(`      (audio element: ${JSON.stringify(audio)})`);
+  check(
+    'the alarm clip decodes and is actually playing',
+    audio.present && audio.paused === false && audio.currentTime > 0,
+    JSON.stringify(audio)
+  );
+  check(
+    'the clip is the two-second loop the app synthesised',
+    audio.duration >= 1.9 && audio.duration <= 2.1,
+    `duration ${audio.duration}`
+  );
+  check(
+    'the clip came from an in-memory blob, not a network fetch',
+    audio.source.startsWith('blob:'),
+    audio.source
   );
 
   const sensorHint = await page.evaluate(() => document.body.innerText);
@@ -329,7 +360,7 @@ try {
   check('pausing resets the progress to zero', afterPause === 0, `${afterPause}%`);
   check(
     'the interruption is counted and the buzz intensified',
-    /中断\s*1\s*次/.test(interruptText) && /震动强度\s*\+20%/.test(interruptText),
+    /中断\s*1\s*次/.test(interruptText) && /强度\s*\+20%/.test(interruptText),
     interruptText.replace(/\s+/g, ' ').slice(0, 90)
   );
 

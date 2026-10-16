@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAlarms } from './use-alarms';
 import type { Alarm } from '@/types/alarm';
+import { formatClock } from '@/types/alarm';
 import { dueAlarms, occurrenceOn, ringKey } from '@/lib/next-alarm';
 import { getAlarmSound } from '@/lib/alarm-sound';
 import { vibrate } from '@/lib/motion';
@@ -32,7 +33,7 @@ const TICK_MS = 15_000;
 const CATCHUP_MS = 5 * 60_000;
 
 function formatTime(alarm: Alarm): string {
-  return `${String(alarm.hour).padStart(2, '0')}:${String(alarm.minute).padStart(2, '0')}`;
+  return formatClock(alarm.hour, alarm.minute);
 }
 
 /**

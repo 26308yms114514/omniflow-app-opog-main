@@ -1,4 +1,4 @@
-import { Alarm, TASK_ICONS, TASK_LABELS, describeRepeat } from '@/types/alarm';
+import { Alarm, TASK_ICONS, TASK_LABELS, describeRepeat, formatClock } from '@/types/alarm';
 import { Switch } from '@/components/ui/switch';
 import { Button } from '@/components/ui/button';
 import { Pencil, Trash2 } from 'lucide-react';
@@ -13,7 +13,7 @@ interface Props {
 
 export default function AlarmCard({ alarm, onToggle, onEdit, onDelete, onRing }: Props) {
   const repeatText = describeRepeat(alarm.repeat);
-  const timeStr = `${String(alarm.hour).padStart(2, '0')}:${String(alarm.minute).padStart(2, '0')}`;
+  const timeStr = formatClock(alarm.hour, alarm.minute);
 
   return (
     <div

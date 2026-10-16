@@ -15,6 +15,7 @@ import {
   TASK_LABELS,
   TASK_TYPES,
   describeRepeat,
+  formatClock,
   normalizeAlarm,
   normalizeTaskType,
 } from './alarm';
@@ -73,6 +74,19 @@ check('the default shake duration is not trivial', () => {
 
 check('the default interrupt tolerance leaves room to react', () => {
   assert.ok(DEFAULT_CONFIG.interruptTolerance >= 2, String(DEFAULT_CONFIG.interruptTolerance));
+});
+
+check('clock times are zero padded', () => {
+  assert.equal(formatClock(7, 0), '07:00');
+  assert.equal(formatClock(23, 59), '23:59');
+  assert.equal(formatClock(0, 5), '00:05');
+});
+
+check('clock formatting never produces NaN', () => {
+  // Stored data can be junk; the card must not print "NaN:NaN".
+  assert.equal(formatClock(Number.NaN, Number.NaN), '00:00');
+  assert.equal(formatClock(25, 70), '01:10');
+  assert.equal(formatClock(-1, -1), '23:59');
 });
 
 check('every offered task has a label, icon and description', () => {

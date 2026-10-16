@@ -5,16 +5,39 @@ import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import AlarmCard from '@/components/custom/AlarmCard';
 import { useAlarms } from '@/hooks/use-alarms';
+import { formatClock } from '@/types/alarm';
+import type { Alarm } from '@/types/alarm';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
 export default function AlarmList() {
   const navigate = useNavigate();
   const { alarms, toggleAlarm, deleteAlarm } = useAlarms();
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  /** The alarm awaiting confirmation; null when the dialog is closed. */
+  const [pendingDelete, setPendingDelete] = useState<Alarm | null>(null);
 
-  const handleDelete = (id: string) => {
-    setDeletingId(id);
+  /**
+   * Deleting used to happen on the first tap. On a phone that button sits
+   * directly beside 测试, and a mistap destroyed the alarm silently with no way
+   * back — so it is confirmed first.
+   */
+  const confirmDelete = () => {
+    const target = pendingDelete;
+    if (!target) return;
+    setPendingDelete(null);
+    setDeletingId(target.id);
+    // Brief fade, so the card does not vanish out from under the finger.
     setTimeout(() => {
-      deleteAlarm(id);
+      deleteAlarm(target.id);
       setDeletingId(null);
       toast.success('闹钟已删除');
     }, 200);
@@ -83,7 +106,7 @@ export default function AlarmList() {
                   alarm={alarm}
                   onToggle={() => toggleAlarm(alarm.id)}
                   onEdit={() => navigate(`/edit/${alarm.id}`)}
-                  onDelete={() => handleDelete(alarm.id)}
+                  onDelete={() => setPendingDelete(alarm)}
                   onRing={() => navigate(`/task/${alarm.id}`)}
                 />
               </div>
@@ -91,6 +114,35 @@ export default function AlarmList() {
           </div>
         )}
       </main>
+
+      <AlertDialog
+        open={pendingDelete !== null}
+        onOpenChange={open => {
+          if (!open) setPendingDelete(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>删除这个闹钟？</AlertDialogTitle>
+            <AlertDialogDescription>
+              {pendingDelete
+                ? `${formatClock(pendingDelete.hour, pendingDelete.minute)}${
+                    pendingDelete.label ? ` · ${pendingDelete.label}` : ''
+                  } 将被永久删除，无法撤销。`
+                : ''}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmDelete}
+              className="bg-destructive text-white hover:bg-destructive/90"
+            >
+              删除
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

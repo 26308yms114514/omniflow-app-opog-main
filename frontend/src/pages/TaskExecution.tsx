@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAlarms } from '@/hooks/use-alarms';
 import { useWakeLock } from '@/hooks/use-wake-lock';
-import { AlarmSession, TaskType, DEFAULT_CONFIG } from '@/types/alarm';
+import { AlarmSession, TaskType, DEFAULT_CONFIG, formatClock } from '@/types/alarm';
 import { TASK_LABELS, TASK_ICONS } from '@/types/alarm';
 import { getAlarmSound } from '@/lib/alarm-sound';
 import { endRing, getActiveRing } from '@/lib/active-ring';
@@ -505,7 +505,7 @@ export default function TaskExecution() {
     );
   }
 
-  const timeStr = `${String(alarm.hour).padStart(2, '0')}:${String(alarm.minute).padStart(2, '0')}`;
+  const timeStr = formatClock(alarm.hour, alarm.minute);
 
   // COMPLETED
   if (phase === 'completed') {

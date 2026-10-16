@@ -476,19 +476,47 @@ try {
     (await page.evaluate(() => document.body.innerText)).includes('工作日')
   );
 
-  // ---- no runtime errors ------------------------------------------------
-  check(
-    'no uncaught errors reached the page',
-    pageProblems.length === 0,
-    pageProblems.slice(0, 3).join(' | ')
-  );
-
   // ---- persistence ------------------------------------------------------
+  // Checked here, before the delete scenario empties the store on purpose.
   const persisted = await page.evaluate(() => localStorage.getItem('alarms_v1'));
   check(
     'alarms persist in localStorage',
     !!persisted && persisted.includes('E2E 新建'),
     String(persisted).slice(0, 80)
+  );
+
+  // ---- destructive actions are confirmed --------------------------------
+  // 删除 sits right beside 测试 in the card, so on a phone the first tap must
+  // not destroy anything.
+  const alarmCount = () =>
+    page.evaluate(() => JSON.parse(localStorage.getItem('alarms_v1') || '[]').length);
+
+  await page.getByRole('button', { name: /删除/ }).first().click();
+  const confirmDialog = page.getByRole('alertdialog');
+  check(
+    'deleting asks for confirmation first',
+    await confirmDialog.isVisible().catch(() => false)
+  );
+  check('the alarm survives while the dialog is open', (await alarmCount()) === 1);
+
+  await confirmDialog.getByRole('button', { name: '取消' }).click();
+  await page.waitForTimeout(400);
+  check('cancelling leaves the alarm alone', (await alarmCount()) === 1);
+
+  await page.getByRole('button', { name: /删除/ }).first().click();
+  await page.getByRole('alertdialog').getByRole('button', { name: '删除' }).click();
+  await page.waitForTimeout(700);
+  check('confirming removes the alarm', (await alarmCount()) === 0);
+  check(
+    'the empty state returns',
+    (await page.evaluate(() => document.body.innerText)).includes('还没有闹钟')
+  );
+
+  // ---- no runtime errors ------------------------------------------------
+  check(
+    'no uncaught errors reached the page',
+    pageProblems.length === 0,
+    pageProblems.slice(0, 3).join(' | ')
   );
 
   // ---- notification channel over a trustworthy origin -------------------

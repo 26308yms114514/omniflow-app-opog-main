@@ -145,6 +145,20 @@ const WEEKDAYS: (keyof RepeatDays)[] = ['mon', 'tue', 'wed', 'thu', 'fri'];
 const WEEKEND: (keyof RepeatDays)[] = ['sat', 'sun'];
 
 /**
+ * "HH:MM", the single place this app decides how a clock time is written.
+ * The same template string used to be repeated in the alarm card, the task
+ * screen and the scheduler, which is how formats drift apart.
+ *
+ * Out-of-range or non-numeric input is wrapped rather than producing "NaN:NaN".
+ */
+export function formatClock(hour: number, minute: number): string {
+  const wrap = (value: number, span: number) =>
+    (((Math.trunc(Number(value)) || 0) % span) + span) % span;
+  const pad = (value: number) => String(value).padStart(2, '0');
+  return `${pad(wrap(hour, 24))}:${pad(wrap(minute, 60))}`;
+}
+
+/**
  * Human-readable repeat summary.
  *
  * An empty day set is deliberately reported as 每天 rather than 仅一次: that is

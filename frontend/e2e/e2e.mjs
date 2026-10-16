@@ -558,6 +558,30 @@ try {
     (await page.evaluate(() => document.body.innerText)).includes('还没有闹钟')
   );
 
+  // ---- stats page -------------------------------------------------------
+  // Never covered before, and this round moved its duration maths.
+  await page.evaluate(() => {
+    const now = Date.now();
+    localStorage.setItem('sessions_v1', JSON.stringify([
+      { alarmId: 'a', startedAt: now - 90_000, completedAt: now - 30_000, interruptCount: 2, taskType: 'shake', difficulty: 'medium', success: true },
+      { alarmId: 'b', startedAt: now - 20_000, completedAt: now - 10_000, interruptCount: 0, taskType: 'steps', difficulty: 'hard', success: true },
+    ]));
+  });
+  await page.goto(`${HASH}#/stats`, { waitUntil: 'load' });
+  await page.waitForSelector('text=起床统计', { timeout: 10_000 });
+  await page.waitForTimeout(300);
+  const statsText = await page.evaluate(() => document.body.innerText);
+  check('the stats page renders with data', statsText.includes('起床成功率') && statsText.includes('100%'));
+  check(
+    'the average duration is a human duration, not a raw second count',
+    statsText.includes('35秒'),
+    statsText.replace(/\s+/g, ' ').slice(0, 100)
+  );
+  check(
+    'both task names are listed',
+    statsText.includes('持续摇晃') && statsText.includes('原地踏步')
+  );
+
   // ---- no runtime errors ------------------------------------------------
   check(
     'no uncaught errors reached the page',

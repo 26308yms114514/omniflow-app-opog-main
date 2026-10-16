@@ -3,6 +3,7 @@ import { ChevronLeft, TrendingUp, Clock, AlertTriangle, CheckCircle } from 'luci
 import { Button } from '@/components/ui/button';
 import { useAlarms } from '@/hooks/use-alarms';
 import { TASK_LABELS } from '@/types/alarm';
+import { elapsedSecondsSince, formatDuration } from '@/lib/elapsed';
 
 export default function Stats() {
   const navigate = useNavigate();
@@ -11,8 +12,15 @@ export default function Stats() {
   const total = sessions.length;
   const successful = sessions.filter(s => s.success).length;
   const successRate = total > 0 ? Math.round((successful / total) * 100) : 0;
-  const avgDuration = total > 0
-    ? Math.round(sessions.filter(s => s.completedAt).reduce((acc, s) => acc + ((s.completedAt! - s.startedAt) / 1000), 0) / successful || 0)
+  // Only sessions that actually finished have a duration, so the denominator
+  // has to be that same set — it used to be the success count, which silently
+  // skewed the average whenever the two differed.
+  const finished = sessions.filter(s => s.completedAt);
+  const avgDuration = finished.length > 0
+    ? Math.round(
+        finished.reduce((acc, s) => acc + elapsedSecondsSince(s.startedAt, s.completedAt), 0) /
+          finished.length
+      )
     : 0;
   const avgInterrupts = total > 0
     ? (sessions.reduce((acc, s) => acc + s.interruptCount, 0) / total).toFixed(1)
@@ -65,7 +73,7 @@ export default function Stats() {
                   <Clock className="w-4 h-4" />
                   <span className="text-xs font-medium">平均用时</span>
                 </div>
-                <p className="text-3xl font-bold text-foreground">{avgDuration}s</p>
+                <p className="text-3xl font-bold text-foreground">{formatDuration(avgDuration)}</p>
                 <p className="text-xs text-muted-foreground mt-1">每次起床</p>
               </div>
               <div className="bg-card rounded-2xl border border-border p-4">
@@ -114,7 +122,7 @@ export default function Stats() {
                 {recent.map((s, i) => {
                   const date = new Date(s.startedAt);
                   const dateStr = `${date.getMonth() + 1}/${date.getDate()} ${String(date.getHours()).padStart(2,'0')}:${String(date.getMinutes()).padStart(2,'0')}`;
-                  const dur = s.completedAt ? Math.round((s.completedAt - s.startedAt) / 1000) : null;
+                  const dur = s.completedAt ? elapsedSecondsSince(s.startedAt, s.completedAt) : null;
                   return (
                     <div key={i} className="flex items-center justify-between py-2 border-b border-border/50 last:border-0">
                       <div className="flex items-center gap-2">
@@ -126,7 +134,7 @@ export default function Stats() {
                             type that no longer exists — show the raw value
                             rather than a blank cell. */}
                         <span>{TASK_LABELS[s.taskType] ?? s.taskType}</span>
-                        {dur && <span>{dur}s</span>}
+                        {dur !== null && <span>{formatDuration(dur)}</span>}
                         {s.interruptCount > 0 && <span className="text-orange-500">中断{s.interruptCount}次</span>}
                       </div>
                     </div>

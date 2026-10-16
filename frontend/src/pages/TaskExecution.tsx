@@ -28,6 +28,7 @@ import {
   effectiveShakeThreshold,
   effectiveStepThreshold,
 } from '@/lib/difficulty';
+import { elapsedSecondsSince, formatDuration } from '@/lib/elapsed';
 
 type Phase = 'ringing' | 'task' | 'interrupted' | 'completed';
 
@@ -476,7 +477,10 @@ export default function TaskExecution() {
       startProgressTimer();
       if (elapsedTimerRef.current) clearInterval(elapsedTimerRef.current);
       elapsedTimerRef.current = setInterval(() => {
-        setElapsedSec(s => s + 1);
+        // Derived from the clock rather than accumulated per tick: Android
+        // throttles a backgrounded tab, and counting ticks made the on-screen
+        // clock disagree with the duration reported on completion.
+        setElapsedSec(elapsedSecondsSince(startTimeRef.current));
       }, 1000);
       startInterruptTimer();
     } finally {
@@ -536,7 +540,7 @@ export default function TaskExecution() {
 
   // COMPLETED
   if (phase === 'completed') {
-    const totalSec = Math.round((Date.now() - startTimeRef.current) / 1000);
+    const totalSec = elapsedSecondsSince(startTimeRef.current);
     return (
       <div className="min-h-dvh bg-background flex flex-col items-center justify-center px-6 text-center gap-6">
         <div className="w-24 h-24 rounded-full bg-green-500/20 flex items-center justify-center animate-bounce">
@@ -549,7 +553,7 @@ export default function TaskExecution() {
         <div className="grid grid-cols-2 gap-4 w-full max-w-xs">
           <div className="bg-card rounded-2xl border border-border p-4">
             <p className="text-xs text-muted-foreground">用时</p>
-            <p className="text-2xl font-bold text-foreground mt-1">{totalSec}秒</p>
+            <p className="text-2xl font-bold text-foreground mt-1">{formatDuration(totalSec)}</p>
           </div>
           <div className="bg-card rounded-2xl border border-border p-4">
             <p className="text-xs text-muted-foreground">中断次数</p>
@@ -662,7 +666,7 @@ export default function TaskExecution() {
       {/* Top info */}
       <div className="text-center">
         <p className="text-4xl font-bold tabular-nums text-foreground">{timeStr}</p>
-        <p className="text-muted-foreground text-sm mt-1">已用时 {elapsedSec}秒</p>
+        <p className="text-muted-foreground text-sm mt-1">已用时 {formatDuration(elapsedSec)}</p>
       </div>
 
       {/* Center animation */}

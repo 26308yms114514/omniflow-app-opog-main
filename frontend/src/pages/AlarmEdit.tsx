@@ -254,13 +254,13 @@ export default function AlarmEdit() {
             </div>
             <Slider
               min={10}
-              max={120}
-              step={5}
+              max={200}
+              step={10}
               value={[config.count]}
               onValueChange={([v]) => setConfig(prev => ({ ...prev, count: v }))}
             />
             <div className="flex justify-between text-xs text-muted-foreground mt-1">
-              <span>10步</span><span>120步</span>
+              <span>10步</span><span>200步</span>
             </div>
           </section>
         )}

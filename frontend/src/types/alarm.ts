@@ -64,9 +64,14 @@ export interface AlarmSession {
 
 export const DEFAULT_CONFIG: AlarmConfig = {
   taskType: 'shake',
-  difficulty: 'easy',
+  // Neutral, matching every `?? …` fallback in the app. It used to be 'easy'
+  // while the fallbacks said 'medium', so a new alarm and a malformed one
+  // behaved differently.
+  difficulty: 'medium',
   duration: 30,
-  count: 10,
+  // Steps, not squats: `count` used to mean "reps" for tasks that no longer
+  // exist, and 10 steps is about five seconds of marching — no wake-up at all.
+  count: 60,
   interruptTolerance: 3,
   sensitivity: 'medium',
   snoozeEnabled: false,

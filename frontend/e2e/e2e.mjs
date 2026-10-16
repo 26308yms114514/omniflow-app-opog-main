@@ -6,6 +6,16 @@
  * through the real pipeline, which is the only way to prove that the shake and
  * march tasks advance progress.
  *
+ * Why the events are dispatched from a script rather than fed to the browser:
+ * CDP's sensor override (`Emulation.setSensorOverrideEnabled` +
+ * `setSensorOverrideReadings`) only drives the Generic Sensor API
+ * (`new Accelerometer()`). `devicemotion` comes from a different platform path:
+ * with the override active the page receives either no events or one with every
+ * field null. Both combinations (accelerometer alone, and
+ * linear-acceleration + gravity) were tried. So the sensor *plumbing* a real
+ * phone uses cannot be reproduced here — what these tests prove is that the
+ * threshold, timing and progress logic is right given the events Android sends.
+ *
  * Uses the installed Edge (channel: 'msedge') so no browser download is needed.
  *
  * Needs two origins, because they prove different things:

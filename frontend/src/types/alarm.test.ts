@@ -9,6 +9,7 @@
  */
 import assert from 'node:assert/strict';
 import {
+  DEFAULT_CONFIG,
   TASK_DESCRIPTIONS,
   TASK_ICONS,
   TASK_LABELS,
@@ -52,6 +53,26 @@ console.log('alarm types');
 
 check('exactly two tasks are offered', () => {
   assert.deepEqual(TASK_TYPES, ['shake', 'steps']);
+});
+
+check('the default difficulty is the neutral one', () => {
+  // It used to be 'easy' while every `?? …` fallback in the app said 'medium',
+  // so a freshly created alarm and a malformed one behaved differently.
+  assert.equal(DEFAULT_CONFIG.difficulty, 'medium');
+});
+
+check('the default step target is not trivial', () => {
+  // `count` used to mean squat reps; 10 steps is roughly five seconds of
+  // marching, which would not wake anybody.
+  assert.ok(DEFAULT_CONFIG.count >= 30, `count is ${DEFAULT_CONFIG.count}`);
+});
+
+check('the default shake duration is not trivial', () => {
+  assert.ok(DEFAULT_CONFIG.duration >= 20, `duration is ${DEFAULT_CONFIG.duration}`);
+});
+
+check('the default interrupt tolerance leaves room to react', () => {
+  assert.ok(DEFAULT_CONFIG.interruptTolerance >= 2, String(DEFAULT_CONFIG.interruptTolerance));
 });
 
 check('every offered task has a label, icon and description', () => {

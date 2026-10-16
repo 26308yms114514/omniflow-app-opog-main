@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAlarms } from '@/hooks/use-alarms';
 import { useWakeLock } from '@/hooks/use-wake-lock';
-import { AlarmSession, TaskType } from '@/types/alarm';
+import { AlarmSession, TaskType, DEFAULT_CONFIG } from '@/types/alarm';
 import { TASK_LABELS, TASK_ICONS } from '@/types/alarm';
 import { getAlarmSound } from '@/lib/alarm-sound';
 import { endRing, getActiveRing } from '@/lib/active-ring';
@@ -100,15 +100,17 @@ export default function TaskExecution() {
 
   const soundRef = useRef(getAlarmSound());
 
-  const taskType: TaskType = alarm?.config.taskType ?? 'shake';
-  const targetDuration = alarm?.config.duration ?? 30;
+  // Every fallback comes from DEFAULT_CONFIG rather than a literal: repeating
+  // the numbers here is how the defaults drifted apart in the first place.
+  const taskType: TaskType = alarm?.config.taskType ?? DEFAULT_CONFIG.taskType;
+  const targetDuration = alarm?.config.duration ?? DEFAULT_CONFIG.duration;
   const isStepTask = taskType === 'steps';
-  const stepTarget = alarm?.config.count ?? 10;
-  const difficulty = alarm?.config.difficulty ?? 'medium';
+  const stepTarget = alarm?.config.count ?? DEFAULT_CONFIG.count;
+  const difficulty = alarm?.config.difficulty ?? DEFAULT_CONFIG.difficulty;
   // The difficulty setting scales how demanding detection is; the slider the
   // user set is the base value, so the two never fight each other.
   const interruptTolerance = effectiveInterruptTolerance(
-    alarm?.config.interruptTolerance ?? 3,
+    alarm?.config.interruptTolerance ?? DEFAULT_CONFIG.interruptTolerance,
     difficulty
   );
 
@@ -116,7 +118,7 @@ export default function TaskExecution() {
   useEffect(() => { phaseRef.current = phase; }, [phase]);
   useEffect(() => { motionActiveRef.current = motionActive; }, [motionActive]);
   useEffect(() => {
-    const sensitivity = alarm?.config.sensitivity ?? 'medium';
+    const sensitivity = alarm?.config.sensitivity ?? DEFAULT_CONFIG.sensitivity;
     // A snoozed alarm comes back harder: fold the carried boost into both
     // thresholds so the second attempt genuinely costs more.
     const boost = boostMultiplier(getActiveRing()?.boostPercent ?? 0);
@@ -291,7 +293,7 @@ export default function TaskExecution() {
       completedAt: Date.now(),
       interruptCount,
       taskType,
-      difficulty: alarm?.config.difficulty ?? 'easy',
+      difficulty: alarm?.config.difficulty ?? DEFAULT_CONFIG.difficulty,
       success: true,
     };
     addSession(session);

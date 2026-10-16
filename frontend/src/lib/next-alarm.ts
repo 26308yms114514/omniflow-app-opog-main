@@ -103,8 +103,18 @@ export function dueAlarms(
     if (!alarm.enabled) continue;
     const repeats = hasAnyRepeatDay(alarm);
     if (repeats && !repeatsOn(alarm, now)) continue;
-    const elapsed = now.getTime() - occurrenceOn(alarm, now).getTime();
+
+    const occurrence = occurrenceOn(alarm, now);
+    const elapsed = now.getTime() - occurrence.getTime();
     if (elapsed < 0 || elapsed > windowMs) continue;
+
+    // The catch-up window exists for a scheduler that was throttled or asleep
+    // when the moment passed. It must not fire retroactively for an alarm that
+    // was created or edited *after* its own scheduled moment: setting 06:00 at
+    // 06:03 means tomorrow, which is what the countdown already promised.
+    const changedAt = alarm.updatedAt ?? alarm.createdAt ?? 0;
+    if (changedAt > occurrence.getTime()) continue;
+
     due.push(alarm);
   }
   return due;

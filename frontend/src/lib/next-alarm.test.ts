@@ -180,4 +180,43 @@ check('dueAlarms can return several alarms at once', () => {
   assert.deepEqual(dueAlarms(both, now, FIVE_MIN).map(a => a.id), ['x', 'y']);
 });
 
+const occurrenceMs = at(2026, 10, 16, 7, 0).getTime();
+
+check('an alarm saved after its own time does not ring retroactively', () => {
+  // Setting 06:00 at 06:03 means tomorrow, which is what the countdown shows.
+  const now = at(2026, 10, 16, 7, 2);
+  const alarm = makeAlarm({ createdAt: occurrenceMs + 60_000 });
+  assert.deepEqual(dueAlarms([alarm], now, FIVE_MIN), []);
+});
+
+check('an alarm that existed before its time still catches up', () => {
+  const now = at(2026, 10, 16, 7, 2);
+  const alarm = makeAlarm({ createdAt: occurrenceMs - 3_600_000 });
+  assert.deepEqual(dueAlarms([alarm], now, FIVE_MIN).map(a => a.id), ['a1']);
+});
+
+check('an edit after the scheduled time suppresses that occurrence', () => {
+  const now = at(2026, 10, 16, 7, 2);
+  const alarm = makeAlarm({
+    createdAt: occurrenceMs - 3_600_000,
+    updatedAt: occurrenceMs + 90_000,
+  });
+  assert.deepEqual(dueAlarms([alarm], now, FIVE_MIN), []);
+});
+
+check('an edit before the scheduled time leaves it ringing', () => {
+  const now = at(2026, 10, 16, 7, 2);
+  const alarm = makeAlarm({
+    createdAt: occurrenceMs - 3_600_000,
+    updatedAt: occurrenceMs - 120_000,
+  });
+  assert.deepEqual(dueAlarms([alarm], now, FIVE_MIN).map(a => a.id), ['a1']);
+});
+
+check('an alarm stored before this rule existed still rings', () => {
+  const now = at(2026, 10, 16, 7, 2);
+  const alarm = makeAlarm({ createdAt: 0 });
+  assert.equal(dueAlarms([alarm], now, FIVE_MIN).length, 1);
+});
+
 console.log(`\n${passed} checks passed`);

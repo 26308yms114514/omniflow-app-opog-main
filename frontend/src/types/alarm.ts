@@ -44,6 +44,12 @@ export interface Alarm {
   enabled: boolean;
   config: AlarmConfig;
   createdAt: number;
+  /**
+   * When the alarm was last edited. Used so that changing an alarm to a time
+   * that has just passed schedules it for tomorrow instead of ringing on the
+   * spot. Absent on alarms stored before this field existed.
+   */
+  updatedAt?: number;
 }
 
 export interface AlarmSession {

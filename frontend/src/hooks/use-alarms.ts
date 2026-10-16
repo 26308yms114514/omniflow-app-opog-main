@@ -27,6 +27,7 @@ export function useAlarms() {
       enabled: true,
       config: { ...DEFAULT_CONFIG },
       createdAt: now,
+      updatedAt: now,
       ...partial,
     };
     setAlarms(prev => [...prev, alarm]);
@@ -34,7 +35,10 @@ export function useAlarms() {
   }, [setAlarms]);
 
   const updateAlarm = useCallback((id: string, updates: Partial<Alarm>) => {
-    setAlarms(prev => prev.map(a => a.id === id ? { ...a, ...updates } : a));
+    // Stamp the edit so that changing an alarm to a time which has just passed
+    // schedules it for tomorrow instead of firing the instant it is saved.
+    const updatedAt = Date.now();
+    setAlarms(prev => prev.map(a => a.id === id ? { ...a, ...updates, updatedAt } : a));
   }, [setAlarms]);
 
   const deleteAlarm = useCallback((id: string) => {

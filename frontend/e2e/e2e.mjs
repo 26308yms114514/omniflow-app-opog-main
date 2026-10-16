@@ -50,7 +50,10 @@ function makeAlarm(overrides) {
       snoozeEnabled: false,
       snoozeDifficultyBoost: 10,
     },
-    createdAt: Date.now(),
+    // Backdated so the alarm counts as pre-existing: an alarm saved *after* its
+    // own scheduled moment deliberately does not ring retroactively.
+    createdAt: Date.now() - 3_600_000,
+    updatedAt: Date.now() - 3_600_000,
     ...overrides,
   };
 }
@@ -365,6 +368,33 @@ try {
   check(
     'snoozing releases the ring',
     (await page.evaluate(() => localStorage.getItem('active_ring_v1'))) === 'null'
+  );
+
+  // ---- a time that just passed must not ring on the spot ----------------
+  // The countdown promises "tomorrow"; the catch-up window used to fire it
+  // immediately, so the app rang the moment you saved it.
+  await page.evaluate(alarm => {
+    localStorage.removeItem('active_ring_v1');
+    localStorage.removeItem('snoozed_alarm_v1');
+    localStorage.setItem('alarms_v1', JSON.stringify([alarm]));
+  }, makeAlarm({
+    id: 'e2e-just-saved',
+    ...dueTime,
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+  }));
+  await page.evaluate(() => {
+    location.hash = '#/';
+  });
+  await page.reload({ waitUntil: 'load' });
+  // Past one scheduler tick.
+  await page.waitForTimeout(16_000);
+
+  const escapedRing = await page.evaluate(() => localStorage.getItem('active_ring_v1'));
+  check(
+    'an alarm saved for a time that just passed does not ring immediately',
+    !String(escapedRing ?? '').includes('e2e-just-saved'),
+    `ring=${escapedRing} url=${page.url()}`
   );
 
   // ---- creating an alarm through the UI --------------------------------

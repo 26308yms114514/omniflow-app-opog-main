@@ -39,6 +39,17 @@ export default function AlarmEdit() {
     setRepeat(prev => ({ ...prev, [day]: !prev[day] }));
   };
 
+  /** The native picker hands back "HH:MM"; an emptied field gives "". */
+  const handleTimeInput = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const [rawHour, rawMinute] = e.target.value.split(':');
+    const nextHour = Number(rawHour);
+    const nextMinute = Number(rawMinute);
+    if (Number.isFinite(nextHour)) setHour(((nextHour % 24) + 24) % 24);
+    if (Number.isFinite(nextMinute)) setMinute(((nextMinute % 60) + 60) % 60);
+  };
+
+  const noRepeatDaySelected = DAY_LABELS.every(day => !repeat[day]);
+
   const setTask = (t: TaskType) => setConfig(prev => ({ ...prev, taskType: t }));
   const setDifficulty = (d: Difficulty) => setConfig(prev => ({ ...prev, difficulty: d }));
 
@@ -76,17 +87,59 @@ export default function AlarmEdit() {
         {/* Time Picker */}
         <section className="bg-card rounded-2xl border border-border p-5">
           <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-4">起床时间</h2>
-          <div className="flex items-center justify-center gap-2">
+          <div className="relative flex items-center justify-center gap-2">
+            {/*
+              Invisible native time input covering the readout. On a phone,
+              tapping the number opens the OS time picker — moving the hour from
+              7 to 14 by tapping ▲ seven times is the kind of friction that
+              makes an alarm app annoying at exactly the wrong moment. The arrow
+              buttons are lifted above it so they keep working.
+            */}
+            <input
+              type="time"
+              aria-label="起床时间"
+              value={`${hourStr}:${minStr}`}
+              onChange={handleTimeInput}
+              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+            />
             <div className="flex flex-col items-center gap-1">
-              <Button variant="ghost" size="sm" onClick={() => setHour(h => (h + 1) % 24)}>▲</Button>
-              <span className="text-5xl font-bold tabular-nums w-16 text-center">{hourStr}</span>
-              <Button variant="ghost" size="sm" onClick={() => setHour(h => (h - 1 + 24) % 24)}>▼</Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="relative z-10"
+                onClick={() => setHour(h => (h + 1) % 24)}
+              >
+                ▲
+              </Button>
+              <span className="text-5xl font-bold tabular-nums w-16 text-center select-none">{hourStr}</span>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="relative z-10"
+                onClick={() => setHour(h => (h - 1 + 24) % 24)}
+              >
+                ▼
+              </Button>
             </div>
-            <span className="text-4xl font-bold text-muted-foreground mb-1">:</span>
+            <span className="text-4xl font-bold text-muted-foreground mb-1 select-none">:</span>
             <div className="flex flex-col items-center gap-1">
-              <Button variant="ghost" size="sm" onClick={() => setMinute(m => (m + 1) % 60)}>▲</Button>
-              <span className="text-5xl font-bold tabular-nums w-16 text-center">{minStr}</span>
-              <Button variant="ghost" size="sm" onClick={() => setMinute(m => (m - 1 + 60) % 60)}>▼</Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="relative z-10"
+                onClick={() => setMinute(m => (m + 1) % 60)}
+              >
+                ▲
+              </Button>
+              <span className="text-5xl font-bold tabular-nums w-16 text-center select-none">{minStr}</span>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="relative z-10"
+                onClick={() => setMinute(m => (m - 1 + 60) % 60)}
+              >
+                ▼
+              </Button>
             </div>
           </div>
           <div className="mt-4">
@@ -118,6 +171,11 @@ export default function AlarmEdit() {
               </button>
             ))}
           </div>
+          {noRepeatDaySelected && (
+            <p className="text-xs text-amber-600 mt-3 leading-relaxed">
+              没有选择任何日期，这个闹钟会<strong>每天</strong>提醒。
+            </p>
+          )}
         </section>
 
         {/* Task Type — only the two implemented tasks are offered */}

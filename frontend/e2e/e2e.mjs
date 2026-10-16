@@ -367,6 +367,57 @@ try {
     (await page.evaluate(() => localStorage.getItem('active_ring_v1'))) === 'null'
   );
 
+  // ---- creating an alarm through the UI --------------------------------
+  // The whole feature depends on this journey, and nothing had exercised it.
+  await page.evaluate(() => {
+    localStorage.removeItem('alarms_v1');
+    localStorage.removeItem('active_ring_v1');
+    localStorage.removeItem('snoozed_alarm_v1');
+    location.hash = '#/';
+  });
+  await page.reload({ waitUntil: 'load' });
+  await page.goto(`${HASH}#/edit/new`, { waitUntil: 'load' });
+  await page.waitForSelector('text=新增闹钟', { timeout: 10_000 });
+
+  const hourLabel = page.locator('span.text-5xl').first();
+  const minuteLabel = page.locator('span.text-5xl').nth(1);
+
+  await page.fill('input[type="time"]', '06:30');
+  check(
+    'the native time field drives the readout',
+    (await hourLabel.textContent())?.trim() === '06' &&
+      (await minuteLabel.textContent())?.trim() === '30',
+    `${await hourLabel.textContent()}:${await minuteLabel.textContent()}`
+  );
+
+  await page.getByRole('button', { name: '▲' }).first().click();
+  check('the arrow buttons still nudge the hour', (await hourLabel.textContent())?.trim() === '07');
+  await page.getByRole('button', { name: '▼' }).first().click();
+  check('and nudge it back down', (await hourLabel.textContent())?.trim() === '06');
+
+  await page.fill('input[type="text"]', 'E2E 新建');
+  await page.getByRole('button', { name: /原地踏步/ }).click();
+  await page.getByRole('button', { name: '保存' }).click();
+
+  await page.waitForFunction(() => location.hash === '#/' || location.hash === '', null, {
+    timeout: 10_000,
+  });
+  check('saving returns to the home screen', page.url().endsWith('#/'), page.url());
+
+  const created = await page.evaluate(() => {
+    const raw = JSON.parse(localStorage.getItem('alarms_v1') || '[]');
+    return raw[0] ?? null;
+  });
+  check(
+    'the alarm is stored with the chosen time and task',
+    created?.hour === 6 && created?.minute === 30 && created?.config?.taskType === 'steps',
+    JSON.stringify(created && { hour: created.hour, minute: created.minute, task: created.config?.taskType })
+  );
+  check(
+    'the new alarm is announced on the home screen',
+    (await page.evaluate(() => document.body.innerText)).includes('E2E 新建')
+  );
+
   // ---- no runtime errors ------------------------------------------------
   check(
     'no uncaught errors reached the page',
@@ -378,7 +429,7 @@ try {
   const persisted = await page.evaluate(() => localStorage.getItem('alarms_v1'));
   check(
     'alarms persist in localStorage',
-    !!persisted && persisted.includes('e2e-snooze'),
+    !!persisted && persisted.includes('E2E 新建'),
     String(persisted).slice(0, 80)
   );
 } catch (error) {

@@ -1,47 +1,44 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
+import { readStored, subscribeStored, writeStored } from '@/lib/local-store';
 
+/**
+ * `useState` persisted to localStorage.
+ *
+ * State is kept in sync both with other tabs (native `storage` event) and with
+ * other components in this tab (see lib/local-store). The second half matters:
+ * the alarm scheduler stays mounted for the whole session, so without it a
+ * newly created alarm would never be observed by it.
+ */
 export function useLocalStorage<T>(key: string, initialValue: T) {
-  // Get from local storage then parse stored json or return initialValue
-  const [storedValue, setStoredValue] = useState<T>(() => {
-    try {
-      const item = window.localStorage.getItem(key);
-      return item ? JSON.parse(item) : initialValue;
-    } catch (error) {
-      console.error(`Error reading localStorage key "${key}":`, error);
-      return initialValue;
-    }
-  });
+  const [storedValue, setStoredValue] = useState<T>(() =>
+    readStored(key, initialValue)
+  );
 
-  // Return a wrapped version of useState's setter function that persists the new value to localStorage
+  // Return a wrapped version of useState's setter that also persists the value
   const setValue = (value: T | ((val: T) => T)) => {
-    try {
-      // Allow value to be a function so we have the same API as useState
-      const valueToStore =
-        value instanceof Function ? value(storedValue) : value;
-      setStoredValue(valueToStore);
-      window.localStorage.setItem(key, JSON.stringify(valueToStore));
-    } catch (error) {
-      console.error(`Error setting localStorage key "${key}":`, error);
-    }
+    // Allow value to be a function so we have the same API as useState
+    const valueToStore = value instanceof Function ? value(storedValue) : value;
+    setStoredValue(valueToStore);
+    writeStored(key, valueToStore);
   };
 
-  // Listen for changes to this key from other tabs/windows
   useEffect(() => {
-    const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === key && e.newValue !== null) {
-        try {
-          setStoredValue(JSON.parse(e.newValue));
-        } catch (error) {
-          console.error(
-            `Error parsing localStorage value for key "${key}":`,
-            error
-          );
-        }
-      }
-    };
+    const resync = () => setStoredValue(readStored(key, initialValue));
 
+    const unsubscribe = subscribeStored(key, resync);
+
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === key && e.newValue !== null) resync();
+    };
     window.addEventListener('storage', handleStorageChange);
-    return () => window.removeEventListener('storage', handleStorageChange);
+
+    return () => {
+      unsubscribe();
+      window.removeEventListener('storage', handleStorageChange);
+    };
+    // `initialValue` is deliberately not a dependency: callers pass a fresh
+    // literal each render, which would resubscribe on every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]);
 
   return [storedValue, setValue] as const;

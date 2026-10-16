@@ -10,6 +10,9 @@ dist/
 .env.local
 .env.*.local
 
+# Self-signed dev certificate for testing on a real phone (contains a key)
+.certs/
+
 # Logs
 *.log
 npm-debug.log*

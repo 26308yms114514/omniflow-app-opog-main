@@ -1,4 +1,11 @@
-export type TaskType = 'shake' | 'steps' | 'squat' | 'qrcode' | 'walk' | 'nfc';
+/**
+ * Unlock tasks the app actually implements.
+ *
+ * `squat`, `qrcode`, `walk` and `nfc` were listed in earlier builds behind a
+ * "即将" badge but were never built — picking one silently fell back to shake
+ * detection. They have been removed rather than left as dead options.
+ */
+export type TaskType = 'shake' | 'steps';
 export type Difficulty = 'easy' | 'medium' | 'hard';
 export type AlarmStatus = 'idle' | 'ringing' | 'task' | 'interrupted' | 'completed';
 
@@ -15,13 +22,17 @@ export interface RepeatDays {
 export interface AlarmConfig {
   taskType: TaskType;
   difficulty: Difficulty;
-  duration: number;       // seconds for shake/steps
-  count: number;          // reps for squat/walk
+  duration: number;       // seconds, for the shake task
+  count: number;          // target steps, for the march task
   interruptTolerance: number; // seconds
+  /**
+   * Base sensor sensitivity. Not surfaced in the editor — `difficulty` is the
+   * user-facing knob and scales this value. Kept in the model so the two are
+   * independent should a sensitivity control return.
+   */
   sensitivity: 'low' | 'medium' | 'high';
   snoozeEnabled: boolean;
-  snoozeDifficultyBoost: number; // percent
-  randomPool: boolean;
+  snoozeDifficultyBoost: number; // percent added to the next ring's difficulty
 }
 
 export interface Alarm {
@@ -54,7 +65,6 @@ export const DEFAULT_CONFIG: AlarmConfig = {
   sensitivity: 'medium',
   snoozeEnabled: false,
   snoozeDifficultyBoost: 10,
-  randomPool: false,
 };
 
 export const DEFAULT_REPEAT: RepeatDays = {
@@ -70,20 +80,38 @@ export const DEFAULT_REPEAT: RepeatDays = {
 export const TASK_LABELS: Record<TaskType, string> = {
   shake: '持续摇晃',
   steps: '原地踏步',
-  squat: '深蹲计数',
-  qrcode: '扫码解锁',
-  walk: '房间绕圈',
-  nfc: 'NFC刷卡',
 };
 
 export const TASK_ICONS: Record<TaskType, string> = {
   shake: '📳',
   steps: '🚶',
-  squat: '🏋️',
-  qrcode: '📷',
-  walk: '🔄',
-  nfc: '📡',
 };
+
+export const TASK_DESCRIPTIONS: Record<TaskType, string> = {
+  shake: '用力摇晃手机，加速度变化达到阈值才计入进度',
+  steps: '手持手机原地踏步，逐步累加目标步数',
+};
+
+/** Every task type currently offered, in display order. */
+export const TASK_TYPES: TaskType[] = ['shake', 'steps'];
+
+/**
+ * Map anything stored by an older build onto a task that still exists.
+ *
+ * Alarms live in localStorage, so a device may still hold `squat` / `qrcode` /
+ * `walk` / `nfc`. Those must not render as an unselected, unusable picker row,
+ * so they degrade to the shake task.
+ */
+export function normalizeTaskType(value: unknown): TaskType {
+  return value === 'steps' ? 'steps' : 'shake';
+}
+
+/** Normalise one stored alarm, preserving identity when nothing changed. */
+export function normalizeAlarm(alarm: Alarm): Alarm {
+  const taskType = normalizeTaskType(alarm?.config?.taskType);
+  if (!alarm?.config || alarm.config.taskType === taskType) return alarm;
+  return { ...alarm, config: { ...alarm.config, taskType } };
+}
 
 export const DIFFICULTY_LABELS: Record<Difficulty, string> = {
   easy: '简单',

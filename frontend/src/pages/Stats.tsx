@@ -122,7 +122,10 @@ export default function Stats() {
                         <span className="text-sm text-foreground">{dateStr}</span>
                       </div>
                       <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                        <span>{TASK_LABELS[s.taskType]}</span>
+                        {/* Sessions recorded by an older build may name a task
+                            type that no longer exists — show the raw value
+                            rather than a blank cell. */}
+                        <span>{TASK_LABELS[s.taskType] ?? s.taskType}</span>
                         {dur && <span>{dur}s</span>}
                         {s.interruptCount > 0 && <span className="text-orange-500">中断{s.interruptCount}次</span>}
                       </div>

@@ -6,7 +6,7 @@ export interface ApiResponse<T> {
   message?: string;
 }
 
-export type TaskType = 'shake' | 'steps' | 'squat' | 'qrcode' | 'walk' | 'nfc';
+export type TaskType = 'shake' | 'steps';
 export type Difficulty = 'easy' | 'medium' | 'hard';
 
 export interface RepeatDays {
@@ -28,7 +28,6 @@ export interface AlarmConfig {
   sensitivity: 'low' | 'medium' | 'high';
   snoozeEnabled: boolean;
   snoozeDifficultyBoost: number;
-  randomPool: boolean;
 }
 
 export interface AlarmItem {

@@ -6,24 +6,16 @@ import { Switch } from '@/components/ui/switch';
 import { Slider } from '@/components/ui/slider';
 import { toast } from 'sonner';
 import { useAlarms } from '@/hooks/use-alarms';
+import { DIFFICULTY_HINTS } from '@/lib/difficulty';
 import {
   Alarm, AlarmConfig, RepeatDays,
   TaskType, Difficulty,
-  TASK_LABELS, TASK_ICONS, DIFFICULTY_LABELS,
+  TASK_LABELS, TASK_ICONS, TASK_TYPES, TASK_DESCRIPTIONS, DIFFICULTY_LABELS,
   DAY_LABELS, DAY_DISPLAY,
   DEFAULT_CONFIG, DEFAULT_REPEAT,
 } from '@/types/alarm';
 
-const TASK_TYPES: TaskType[] = ['shake', 'steps', 'squat', 'qrcode', 'walk', 'nfc'];
 const DIFFICULTIES: Difficulty[] = ['easy', 'medium', 'hard'];
-const TASK_AVAILABLE: Record<TaskType, boolean> = {
-  shake: true,
-  steps: true,
-  squat: false,
-  qrcode: false,
-  walk: false,
-  nfc: false,
-};
 
 export default function AlarmEdit() {
   const { id } = useParams<{ id: string }>();
@@ -128,35 +120,31 @@ export default function AlarmEdit() {
           </div>
         </section>
 
-        {/* Task Type */}
+        {/* Task Type — only the two implemented tasks are offered */}
         <section className="bg-card rounded-2xl border border-border p-5">
           <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">解锁任务</h2>
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-2 gap-3">
             {TASK_TYPES.map(t => {
-              const available = TASK_AVAILABLE[t];
               const selected = config.taskType === t;
               return (
                 <button
                   key={t}
-                  onClick={() => available && setTask(t)}
-                  data-omniflow-feature-status={available ? undefined : 'unbuilt'}
-                  className={`relative flex flex-col items-center gap-1 rounded-xl p-3 border text-sm font-medium transition-all ${
+                  onClick={() => setTask(t)}
+                  className={`flex flex-col items-center gap-1 rounded-xl p-3 border text-sm font-medium transition-all cursor-pointer ${
                     selected
                       ? 'bg-primary text-primary-foreground border-primary'
-                      : available
-                      ? 'bg-muted/50 text-foreground border-border hover:border-primary/50'
-                      : 'bg-muted/20 text-muted-foreground border-border/30 cursor-pointer'
+                      : 'bg-muted/50 text-foreground border-border hover:border-primary/50'
                   }`}
                 >
                   <span className="text-xl">{TASK_ICONS[t]}</span>
                   <span className="text-xs">{TASK_LABELS[t]}</span>
-                  {!available && (
-                    <span className="absolute top-1 right-1 text-[9px] bg-muted text-muted-foreground rounded px-1">即将</span>
-                  )}
                 </button>
               );
             })}
           </div>
+          <p className="text-xs text-muted-foreground mt-3 leading-relaxed">
+            {TASK_DESCRIPTIONS[config.taskType]}
+          </p>
         </section>
 
         {/* Difficulty */}
@@ -177,10 +165,13 @@ export default function AlarmEdit() {
               </button>
             ))}
           </div>
+          <p className="text-xs text-muted-foreground mt-3 leading-relaxed">
+            {DIFFICULTY_HINTS[config.difficulty]}
+          </p>
         </section>
 
-        {/* Task Duration / Count */}
-        {(config.taskType === 'shake' || config.taskType === 'steps') && (
+        {/* Task target: seconds of shaking, or a step count to march out */}
+        {config.taskType === 'shake' ? (
           <section className="bg-card rounded-2xl border border-border p-5">
             <div className="flex items-center justify-between mb-3">
               <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">任务时长</h2>
@@ -195,6 +186,23 @@ export default function AlarmEdit() {
             />
             <div className="flex justify-between text-xs text-muted-foreground mt-1">
               <span>10秒</span><span>120秒</span>
+            </div>
+          </section>
+        ) : (
+          <section className="bg-card rounded-2xl border border-border p-5">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">目标步数</h2>
+              <span className="text-sm font-bold text-primary">{config.count}步</span>
+            </div>
+            <Slider
+              min={10}
+              max={120}
+              step={5}
+              value={[config.count]}
+              onValueChange={([v]) => setConfig(prev => ({ ...prev, count: v }))}
+            />
+            <div className="flex justify-between text-xs text-muted-foreground mt-1">
+              <span>10步</span><span>120步</span>
             </div>
           </section>
         )}

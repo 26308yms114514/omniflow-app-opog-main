@@ -7,9 +7,12 @@ import Stats from './pages/Stats';
 import AppPreview from './pages/AppPreview';
 import TaskDemoPreview from './pages/TaskDemoPreview';
 import NotFound from './pages/NotFound';
+import AlarmScheduler from './components/custom/AlarmScheduler';
 
 const App = () => (
   <HashRouter>
+    {/* Watches the clock on every route and launches the wake-up task. */}
+    <AlarmScheduler />
     <Routes>
       <Route path="/" element={<Index />} />
       <Route path="/alarms" element={<AlarmList />} />

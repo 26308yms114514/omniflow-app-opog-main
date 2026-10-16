@@ -1,10 +1,20 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { useLocalStorage } from './use-localStorage';
-import { Alarm, AlarmSession, DEFAULT_CONFIG, DEFAULT_REPEAT } from '../types/alarm';
+import {
+  Alarm,
+  AlarmSession,
+  DEFAULT_CONFIG,
+  DEFAULT_REPEAT,
+  normalizeAlarm,
+} from '../types/alarm';
 
 export function useAlarms() {
-  const [alarms, setAlarms] = useLocalStorage<Alarm[]>('alarms_v1', []);
+  const [storedAlarms, setAlarms] = useLocalStorage<Alarm[]>('alarms_v1', []);
   const [sessions, setSessions] = useLocalStorage<AlarmSession[]>('sessions_v1', []);
+
+  // Alarms persisted by an older build may name a task type that no longer
+  // exists; normalise on read so the editor and the task screen never see one.
+  const alarms = useMemo(() => storedAlarms.map(normalizeAlarm), [storedAlarms]);
 
   const addAlarm = useCallback((partial: Partial<Alarm> = {}) => {
     const now = Date.now();

@@ -1,18 +1,57 @@
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { BellRing, BarChart2, Plus, Zap, Shield, Clock } from 'lucide-react';
+import { BellRing, BarChart2, Plus, Zap, Shield, Clock, Volume2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import OmniflowBadge from '@/components/custom/OmniflowBadge';
+import EnvironmentCheck from '@/components/custom/EnvironmentCheck';
 import { Toaster } from '@/components/ui/sonner';
+import { toast } from 'sonner';
 import { useAlarms } from '@/hooks/use-alarms';
+import { useNextAlarm } from '@/hooks/use-next-alarm';
+import { describeCountdown } from '@/lib/next-alarm';
+import { getAlarmSound } from '@/lib/alarm-sound';
 
 export default function Index() {
   const navigate = useNavigate();
   const { alarms, sessions } = useAlarms();
+  const next = useNextAlarm(alarms);
+  const [testing, setTesting] = useState(false);
+  const testTimerRef = useRef<number | null>(null);
 
   const total = sessions.length;
   const successful = sessions.filter(s => s.success).length;
   const successRate = total > 0 ? Math.round((successful / total) * 100) : 0;
   const enabledCount = alarms.filter(a => a.enabled).length;
+
+  useEffect(() => {
+    return () => {
+      if (testTimerRef.current) window.clearTimeout(testTimerRef.current);
+      // Never leave a test tone running after the page goes away.
+      getAlarmSound().stop();
+    };
+  }, []);
+
+  /**
+   * Plays the siren for a few seconds. This doubles as the audio unlock: the
+   * user gesture here is what allows the real alarm to sound later.
+   */
+  const handleTestRing = async () => {
+    const sound = getAlarmSound();
+    const unlocked = await sound.unlock();
+    if (!unlocked) {
+      toast.error('浏览器拦截了声音，请再点一次');
+      return;
+    }
+    sound.setBoost(1);
+    sound.start();
+    setTesting(true);
+    if (testTimerRef.current) window.clearTimeout(testTimerRef.current);
+    testTimerRef.current = window.setTimeout(() => {
+      sound.stop();
+      setTesting(false);
+    }, 3000);
+  };
+
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -63,6 +102,46 @@ export default function Index() {
             </div>
           </div>
         </div>
+
+        {/* Next alarm — makes the armed state visible and testable */}
+        {next && (
+          <div className="bg-card rounded-2xl border border-border p-4">
+            <div className="flex items-center gap-3">
+              <div
+                className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                  testing ? 'bg-primary' : 'bg-primary/10'
+                }`}
+              >
+                <Clock className={`w-5 h-5 ${testing ? 'text-primary-foreground' : 'text-primary'}`} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs text-muted-foreground">下次响铃</p>
+                <p className="font-semibold text-foreground truncate">
+                  {String(next.alarm.hour).padStart(2, '0')}:
+                  {String(next.alarm.minute).padStart(2, '0')}
+                  {next.alarm.label ? ` · ${next.alarm.label}` : ''}
+                </p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {describeCountdown(next.at.getTime() - Date.now())}
+                </p>
+              </div>
+              <button
+                onClick={() => void handleTestRing()}
+                className="shrink-0 flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-xl border border-border hover:border-primary/50 transition-colors cursor-pointer"
+              >
+                <Volume2 className="w-3.5 h-3.5" />
+                {testing ? '响铃中' : '试听'}
+              </button>
+            </div>
+            <p className="text-[11px] text-muted-foreground mt-3 leading-relaxed">
+              闹钟在页面打开时触发。安卓请用浏览器菜单「添加到主屏幕」，并保持后台运行。
+            </p>
+          </div>
+        )}
+
+        {/* Capability checklist — the fastest way to diagnose a phone that
+            silently refuses to play sound or read the accelerometer. */}
+        <EnvironmentCheck />
 
         {/* Quick Stats */}
         {total > 0 && (

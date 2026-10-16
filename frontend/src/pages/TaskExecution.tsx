@@ -29,6 +29,7 @@ import {
   effectiveStepThreshold,
 } from '@/lib/difficulty';
 import { elapsedSecondsSince, formatDuration } from '@/lib/elapsed';
+import { ShakeRegularity } from '@/lib/anti-cheat';
 
 type Phase = 'ringing' | 'task' | 'interrupted' | 'completed';
 
@@ -66,6 +67,8 @@ export default function TaskExecution() {
   const [sirenOn, setSirenOn] = useState(false);
   /** True while the start sequence is awaiting permissions and audio. */
   const [starting, setStarting] = useState(false);
+  /** True when the recent shaking rhythm is too even to be human. */
+  const [mechanical, setMechanical] = useState(false);
   /** Difficulty carried over from a snooze, shown to the user. */
   const [boostPercent, setBoostPercent] = useState(0);
   /** Steps counted so far, for the `steps` task. */
@@ -105,6 +108,10 @@ export default function TaskExecution() {
    */
   const startingRef = useRef(false);
   const snoozingRef = useRef(false);
+  /** Machine-regularity analysis of the shaking rhythm. */
+  const regularityRef = useRef(new ShakeRegularity());
+  const wasAboveRef = useRef(false);
+  const mechanicalRef = useRef(false);
   const stepModeRef = useRef(false);
   const stepTargetRef = useRef(10);
 
@@ -254,12 +261,13 @@ export default function TaskExecution() {
         return;
       }
 
+      const stamp =
+        typeof e.timeStamp === 'number' && e.timeStamp > 0
+          ? e.timeStamp
+          : performance.now();
+
       if (stepModeRef.current) {
         // Marching: advance on each detected step instead of on elapsed time.
-        const stamp =
-          typeof e.timeStamp === 'number' && e.timeStamp > 0
-            ? e.timeStamp
-            : performance.now();
         const counted = stepCounterRef.current.push(
           magnitude(sample.x, sample.y, sample.z),
           stamp
@@ -273,9 +281,23 @@ export default function TaskExecution() {
       lastAccelRef.current = sample;
       if (!last) return;
 
-      if (accelerationDelta(sample, last) > thresholdRef.current) {
+      const above = accelerationDelta(sample, last) > thresholdRef.current;
+      if (above) {
+        // Only a rising edge is a stroke. Every above-threshold sample would
+        // just be the accelerometer's own sample rate, which is regular by
+        // construction and would accuse everyone.
+        if (!wasAboveRef.current) {
+          const detector = regularityRef.current;
+          detector.push(stamp);
+          const flagged = detector.isMechanical;
+          if (flagged !== mechanicalRef.current) {
+            mechanicalRef.current = flagged;
+            setMechanical(flagged);
+          }
+        }
         markMotionRef.current();
       }
+      wasAboveRef.current = above;
     };
 
     window.addEventListener('devicemotion', handleMotion);
@@ -396,6 +418,10 @@ export default function TaskExecution() {
     progressTimerRef.current = setInterval(() => {
       if (phaseRef.current !== 'task') return;
       if (!motionActiveRef.current) return;
+      // A rhythm this even means the phone is on a fan or a shaker, not in a
+      // hand. The flag clears the moment the rhythm breaks, so a misjudged
+      // user only has to keep shaking.
+      if (mechanicalRef.current) return;
       progressRef.current = Math.min(progressRef.current + (100 / (targetDuration * 10)), 100);
       setProgress(progressRef.current);
       if (progressRef.current >= 100) {
@@ -474,6 +500,11 @@ export default function TaskExecution() {
       setPhase('task');
       phaseRef.current = 'task';
       startTimeRef.current = Date.now();
+      // Start the anti-cheat window fresh: nothing from before the task counts.
+      regularityRef.current.reset();
+      wasAboveRef.current = false;
+      mechanicalRef.current = false;
+      setMechanical(false);
       startProgressTimer();
       if (elapsedTimerRef.current) clearInterval(elapsedTimerRef.current);
       elapsedTimerRef.current = setInterval(() => {
@@ -682,8 +713,16 @@ export default function TaskExecution() {
 
         <div className="text-center">
           <h2 className="text-xl font-bold text-foreground">{TASK_LABELS[taskType]}</h2>
-          <p className="text-sm text-muted-foreground mt-1">
-            {motionActive ? '动作检测中...' : '请保持动作'}
+          <p
+            className={`text-sm mt-1 ${
+              mechanical ? 'text-red-500 font-semibold' : 'text-muted-foreground'
+            }`}
+          >
+            {mechanical
+              ? '检测到机械性晃动，请自己摇'
+              : motionActive
+              ? '动作检测中...'
+              : '请保持动作'}
           </p>
           <p className="text-xs text-muted-foreground mt-1">
             中断 {interruptCount} 次 | 音量 +{Math.round((volumeLevel - 1) * 100)}%

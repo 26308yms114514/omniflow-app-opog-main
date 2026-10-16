@@ -79,27 +79,47 @@ function makeAlarm(overrides) {
 
 /**
  * Starts a background pump inside the page that keeps emitting synthetic
- * device-motion samples. `shake` swings hard on x; `march` produces a
- * gravity-centred 2 Hz bounce, which is what the step detector expects.
+ * device-motion samples.
+ *
+ *   shake       human-sloppy strokes: the gap between them wanders, which is
+ *               also what keeps the anti-cheat detector from — correctly —
+ *               calling this a machine.
+ *   mechanical  perfectly even strokes, i.e. a phone taped to a fan.
+ *   march       a gravity-centred 2 Hz bounce, which is what the step detector
+ *               expects.
  */
 async function startMotion(page, mode) {
   await page.evaluate(modeName => {
     window.__motionStop = false;
     let t = 0;
+    let sign = 1;
+    let nextFlip = 0;
+
     const tick = () => {
       if (window.__motionStop) return;
       let x = 0;
       let y = 0;
       let z = 9.81;
+
       if (modeName === 'shake') {
-        // Alternate hard so consecutive samples differ by ~30 m/s².
-        x = Math.floor(t / 60) % 2 === 0 ? 15 : -15;
+        if (t >= nextFlip) {
+          sign = -sign;
+          nextFlip = t + 80 + Math.random() * 180;
+        }
+        x = sign * 15;
+      } else if (modeName === 'mechanical') {
+        if (t >= nextFlip) {
+          sign = -sign;
+          nextFlip = t + 120;
+        }
+        x = sign * 15;
       } else {
         const magnitude = 9.81 + 6 * Math.sin(2 * Math.PI * 2 * (t / 1000));
         x = magnitude;
         y = 0;
         z = 0;
       }
+
       window.dispatchEvent(
         new DeviceMotionEvent('devicemotion', {
           accelerationIncludingGravity: { x, y, z },
@@ -214,6 +234,42 @@ try {
   );
 
   await stopMotion(page);
+
+  // ---- anti-cheat: a machine-steady rhythm must not count ----------------
+  // This is the app's headline claim ("加速度计频率方差分析"), so it is worth
+  // proving the fan-on-the-nightstand case really is refused.
+  await page.evaluate(() => {
+    localStorage.removeItem('active_ring_v1');
+  });
+  await page.reload({ waitUntil: 'load' });
+  await page.goto(`${HASH}#/task/e2e-alarm`, { waitUntil: 'load' });
+  await page.waitForSelector('text=开始任务', { timeout: 10_000 });
+
+  await startMotion(page, 'mechanical');
+  await page.getByRole('button', { name: '开始任务' }).click();
+
+  // The detector needs a full window of strokes before it can judge, so the
+  // first second or so legitimately counts. What matters is that it then stops.
+  await page.waitForTimeout(2500);
+  const early = await readProgress(page);
+  await page.waitForTimeout(4000);
+  const later = await readProgress(page);
+  const mechanicalText = await page.evaluate(() => document.body.innerText);
+  await stopMotion(page);
+
+  console.log(
+    `      (machine rhythm: ${early}% after 2.5 s, ${later}% after 6.5 s; unblocked would be 65%)`
+  );
+  check(
+    'a machine-steady rhythm is stopped, not just slowed',
+    later === early && later < 30,
+    `${early}% then ${later}%`
+  );
+  check(
+    'and the user is told why',
+    mechanicalText.includes('机械性晃动'),
+    mechanicalText.replace(/\s+/g, ' ').slice(0, 80)
+  );
 
   // ---- march task -------------------------------------------------------
   await page.evaluate(alarm => {

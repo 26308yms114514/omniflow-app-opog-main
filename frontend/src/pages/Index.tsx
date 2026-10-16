@@ -223,7 +223,7 @@ export default function Index() {
               </div>
               <div>
                 <p className="text-sm font-semibold text-foreground">防作弊保障</p>
-                <p className="text-xs text-muted-foreground mt-0.5">识别机械晃动、躺卧假步，确保真实起床</p>
+                <p className="text-xs text-muted-foreground mt-0.5">分析摇晃节奏的规律性，拦截绑在风扇等装置上的机械晃动</p>
               </div>
             </div>
             <div className="flex items-start gap-3">

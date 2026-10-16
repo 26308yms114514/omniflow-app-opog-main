@@ -63,6 +63,8 @@ export default function TaskExecution() {
   const [elapsedSec, setElapsedSec] = useState(0);
   const [motionActive, setMotionActive] = useState(false);
   const [sirenOn, setSirenOn] = useState(false);
+  /** True while the start sequence is awaiting permissions and audio. */
+  const [starting, setStarting] = useState(false);
   /** Difficulty carried over from a snooze, shown to the user. */
   const [boostPercent, setBoostPercent] = useState(0);
   /** Steps counted so far, for the `steps` task. */
@@ -95,6 +97,13 @@ export default function TaskExecution() {
   const completeTaskRef = useRef<() => void>(() => {});
   const handleStepRef = useRef<() => void>(() => {});
   const markMotionRef = useRef<() => void>(() => {});
+  /**
+   * Re-entry guards. Both the start and the snooze buttons begin with an await,
+   * so a second tap lands while the first is still in flight — and on a touch
+   * screen that is one careless tap away.
+   */
+  const startingRef = useRef(false);
+  const snoozingRef = useRef(false);
   const stepModeRef = useRef(false);
   const stepTargetRef = useRef(10);
 
@@ -431,37 +440,53 @@ export default function TaskExecution() {
 
   // Start task
   const startTask = useCallback(async () => {
-    // Ask for motion access inside the gesture (required on iOS, no-op on
-    // Android) and make sure the siren is actually audible.
-    const availability = await requestMotionAccess();
-    if (availability === 'unsupported' || availability === 'denied') {
-      sensorLiveRef.current = false;
-      setMotionSource('touch');
-    } else {
-      setMotionSource('probing');
-      if (probeTimerRef.current) clearTimeout(probeTimerRef.current);
-      probeTimerRef.current = setTimeout(() => {
-        if (!sensorLiveRef.current) setMotionSource('touch');
-      }, MOTION_PROBE_MS);
+    // A second tap while the first is still awaiting permissions used to start
+    // a second elapsed timer and a second interrupt timer.
+    if (startingRef.current) return;
+    startingRef.current = true;
+    setStarting(true);
+
+    try {
+      // Ask for motion access inside the gesture (required on iOS, no-op on
+      // Android) and make sure the siren is actually audible.
+      const availability = await requestMotionAccess();
+      if (availability === 'unsupported' || availability === 'denied') {
+        sensorLiveRef.current = false;
+        setMotionSource('touch');
+      } else {
+        setMotionSource('probing');
+        if (probeTimerRef.current) clearTimeout(probeTimerRef.current);
+        probeTimerRef.current = setTimeout(() => {
+          if (!sensorLiveRef.current) setMotionSource('touch');
+        }, MOTION_PROBE_MS);
+      }
+
+      await startSiren();
+
+      // "全屏锁定" in a browser means hiding the URL bar. This must happen
+      // inside the tap gesture — the browser refuses otherwise — and may still
+      // be rejected inside an embedded iframe, so it is best-effort.
+      void enterTaskFullscreen().then(entered => {
+        if (entered) void lockPortrait();
+      });
+
+      setPhase('task');
+      phaseRef.current = 'task';
+      startTimeRef.current = Date.now();
+      startProgressTimer();
+      if (elapsedTimerRef.current) clearInterval(elapsedTimerRef.current);
+      elapsedTimerRef.current = setInterval(() => {
+        setElapsedSec(s => s + 1);
+      }, 1000);
+      startInterruptTimer();
+    } finally {
+      // Only a task that actually began keeps the guard; a failure to start
+      // must leave the button usable.
+      if (phaseRef.current !== 'task') {
+        startingRef.current = false;
+        setStarting(false);
+      }
     }
-
-    await startSiren();
-
-    // "全屏锁定" in a browser means hiding the URL bar. This must happen inside
-    // the tap gesture — the browser refuses otherwise — and may still be
-    // rejected inside an embedded iframe, which is why it is best-effort.
-    void enterTaskFullscreen().then(entered => {
-      if (entered) void lockPortrait();
-    });
-
-    setPhase('task');
-    phaseRef.current = 'task';
-    startTimeRef.current = Date.now();
-    startProgressTimer();
-    elapsedTimerRef.current = setInterval(() => {
-      setElapsedSec(s => s + 1);
-    }, 1000);
-    startInterruptTimer();
   }, [startProgressTimer, startInterruptTimer, startSiren]);
 
   /**
@@ -470,7 +495,9 @@ export default function TaskExecution() {
    * The next ring is harder by the configured percentage.
    */
   const handleSnooze = useCallback(() => {
-    if (!alarm) return;
+    // Snoozing twice would stack the boost twice for one decision.
+    if (!alarm || snoozingRef.current) return;
+    snoozingRef.current = true;
     const boost = alarm.config.snoozeDifficultyBoost;
     scheduleSnooze(alarm.id, boost);
     endRing();
@@ -583,14 +610,16 @@ export default function TaskExecution() {
         )}
         <button
           onClick={() => void startTask()}
-          className="w-full max-w-xs py-4 rounded-2xl bg-primary text-primary-foreground font-bold text-lg shadow-lg active:scale-95 transition-transform"
+          disabled={starting}
+          className="w-full max-w-xs py-4 rounded-2xl bg-primary text-primary-foreground font-bold text-lg shadow-lg active:scale-95 transition-transform disabled:opacity-60"
         >
-          开始任务
+          {starting ? '正在启动…' : '开始任务'}
         </button>
         {alarm.config.snoozeEnabled && (
           <button
             onClick={handleSnooze}
-            className="w-full max-w-xs py-3 rounded-2xl border border-border text-muted-foreground text-sm font-medium"
+            disabled={starting}
+            className="w-full max-w-xs py-3 rounded-2xl border border-border text-muted-foreground text-sm font-medium disabled:opacity-60"
           >
             再睡 {SNOOZE_MINUTES} 分钟（下次难度 +{alarm.config.snoozeDifficultyBoost}%）
           </button>

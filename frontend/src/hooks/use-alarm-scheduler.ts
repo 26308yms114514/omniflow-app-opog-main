@@ -53,6 +53,12 @@ function formatTime(alarm: Alarm): string {
  *   - audio needs a prior user gesture, which is why the first interaction
  *     anywhere unlocks the siren;
  *   - notifications are the fallback channel when the siren is not permitted.
+ *
+ * Two ways out of the first limit were checked and are closed, so nobody has to
+ * re-investigate: the Notification Triggers API (`TimestampTrigger` /
+ * `showTrigger`) does not exist in current Chrome — the globals are undefined
+ * and `showNotification` silently ignores the option — and Web Push would need
+ * a server holding the subscription and a scheduler to fire it.
  */
 export function useAlarmScheduler(): void {
   const navigate = useNavigate();

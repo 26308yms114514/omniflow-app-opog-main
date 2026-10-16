@@ -277,6 +277,52 @@ try {
     interruptText.replace(/\s+/g, ' ').slice(0, 90)
   );
 
+  // ---- one tap, even when it arrives twice ------------------------------
+  // Both start buttons begin with an await, so a hurried thumb used to start a
+  // second elapsed timer — and the clock ran at double speed.
+  await page.evaluate(alarm => {
+    localStorage.removeItem('active_ring_v1');
+    localStorage.setItem('alarms_v1', JSON.stringify([alarm]));
+  }, makeAlarm({
+    id: 'e2e-double-tap',
+    config: {
+      ...makeAlarm().config,
+      taskType: 'shake',
+      duration: 120,
+      interruptTolerance: 15,
+    },
+  }));
+  await page.evaluate(() => {
+    location.hash = '#/';
+  });
+  await page.reload({ waitUntil: 'load' });
+  await page.goto(`${HASH}#/task/e2e-double-tap`, { waitUntil: 'load' });
+  await page.waitForSelector('text=开始任务', { timeout: 10_000 });
+
+  await page.evaluate(() => {
+    const button = Array.from(document.querySelectorAll('button')).find(candidate =>
+      candidate.textContent?.includes('开始任务')
+    );
+    // Two taps in the same tick: the second lands while the first is awaiting.
+    button.click();
+    button.click();
+  });
+
+  await startMotion(page, 'shake');
+  await page.waitForTimeout(5000);
+  await stopMotion(page);
+
+  const elapsed = await page.evaluate(() => {
+    const match = document.body.innerText.match(/已用时\s*(\d+)\s*秒/);
+    return match ? Number(match[1]) : -1;
+  });
+  console.log(`      (elapsed reads ${elapsed} s after about five — double time would be ~10)`);
+  check(
+    'a double tap does not start two elapsed timers',
+    elapsed > 0 && elapsed <= 7,
+    `已用时 ${elapsed} 秒 after about five`
+  );
+
   // ---- core loop: a due alarm launches, traps, then releases -----------
   await stopMotion(page);
 

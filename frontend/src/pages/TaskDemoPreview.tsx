@@ -1,7 +1,7 @@
 import { useEffect, useReducer } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  BellRing, ArrowLeft, Play, RotateCcw, Volume2, AlertTriangle,
+  BellRing, ArrowLeft, Play, RotateCcw, Vibrate, AlertTriangle,
   CheckCircle2, Smartphone, Lock, Plus, BarChart2,
 } from 'lucide-react';
 import OmniflowBadge from '@/components/custom/OmniflowBadge';
@@ -88,10 +88,10 @@ function reducer(state: DemoState, action: DemoAction): DemoState {
 }
 
 const RULES = [
-  { code: 'R-01', title: '无关闭按钮', desc: '响铃后界面只展示任务提示与进度，没有关闭或跳过入口。' },
+  { code: 'R-01', title: '无关闭按钮', desc: '触发后界面只展示任务提示与进度，没有关闭或跳过入口。' },
   { code: 'R-03', title: '中断清零', desc: '动作停止超过容忍时限（默认 3 秒），进度立即归零并显示中断警告。' },
-  { code: 'R-04', title: '音量惩罚', desc: '每次中断清零，铃声音量自动增大 20%，上限为系统最大音量。' },
-  { code: 'R-05', title: '永久响铃', desc: '任务未完成时铃声持续播放，不会自动停止。' },
+  { code: 'R-04', title: '震动惩罚', desc: '每次中断清零，震动强度自动增强 20%，上限为设备最强震动。' },
+  { code: 'R-05', title: '持续震动', desc: '任务未完成时震动持续循环，不会自动停止。' },
 ];
 
 const SCAN_CSS = `
@@ -174,7 +174,7 @@ export default function TaskDemoPreview() {
 
               <div className="relative flex items-center justify-between px-5 pt-4 text-[11px] font-bold uppercase tracking-widest text-zinc-400">
                 <span className="flex items-center gap-1"><Lock className="w-3 h-3" /> 已锁定</span>
-                <span className="flex items-center gap-1"><Volume2 className="w-3 h-3" /> {volume}%</span>
+                <span className="flex items-center gap-1"><Vibrate className="w-3 h-3" /> {volume}%</span>
               </div>
 
               {phase === 'ready' && (
@@ -264,7 +264,7 @@ export default function TaskDemoPreview() {
                   <AlertTriangle className="w-16 h-16" />
                   <div className="space-y-1">
                     <p className="text-3xl font-black uppercase">检测到中断</p>
-                    <p className="text-sm font-bold">进度已清零，音量提升至 {volume}%</p>
+                    <p className="text-sm font-bold">进度已清零，震动强度提升至 {volume}%</p>
                   </div>
                   <p className="text-xs font-bold uppercase tracking-widest">即将自动返回任务…</p>
                 </div>
@@ -313,7 +313,7 @@ export default function TaskDemoPreview() {
             </div>
             <h2 className="text-3xl font-black uppercase tracking-tighter leading-tight">动作不停，闹钟不止</h2>
             <p className="text-sm text-zinc-400 leading-relaxed">
-              亲自体验强制清醒闹钟的核心机制：持续动作推进进度，中断就清零并让铃声更响。
+              亲自体验强制清醒闹钟的核心机制：持续动作推进进度，中断就清零并让震动更强。
             </p>
           </div>
 

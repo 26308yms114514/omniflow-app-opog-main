@@ -3,9 +3,9 @@
  *
  * The Android failure modes this app has are all silent: a non-HTTPS origin
  * withholds `DeviceMotionEvent`, a denied permission withholds notifications,
- * and an un-unlocked AudioContext withholds sound. None of them throw. This
- * turns those into a visible checklist so a phone can be diagnosed in seconds
- * instead of by guessing why nothing happened.
+ * and a browser without `navigator.vibrate` withholds the alarm entirely.
+ * None of them throw. This turns those into a visible checklist so a phone can
+ * be diagnosed in seconds instead of by guessing why nothing happened.
  *
  * `evaluateEnvironment` is pure so the rules can be tested without a browser.
  */
@@ -28,7 +28,6 @@ export interface EnvironmentProbes {
   deviceMotion: boolean;
   wakeLock: boolean;
   vibrate: boolean;
-  audio: boolean;
   notification: NotifyPermission;
 }
 
@@ -42,7 +41,6 @@ export function readProbes(): EnvironmentProbes {
     deviceMotion: isDeviceMotionSupported(),
     wakeLock: !!nav && 'wakeLock' in nav,
     vibrate: !!nav && typeof nav.vibrate === 'function',
-    audio: !!win && ('AudioContext' in win || 'webkitAudioContext' in win),
     notification: notificationPermission(),
   };
 }
@@ -66,12 +64,12 @@ export function evaluateEnvironment(p: EnvironmentProbes): Capability[] {
       hint: '没有传感器时只能用点击模拟',
     },
     {
-      id: 'audio',
-      label: '铃声输出',
+      id: 'vibration',
+      label: '震动输出',
       level: 'critical',
-      ok: p.audio,
-      detail: p.audio ? 'Web Audio 可用' : '浏览器不支持 Web Audio',
-      hint: '首次需点击页面任意位置解锁声音',
+      ok: p.vibrate,
+      detail: p.vibrate ? '可用' : '浏览器不支持震动',
+      hint: '这是现在唯一的闹钟通道。iOS Safari 完全没有它，部分安卓机需要开启系统震动',
     },
     {
       id: 'notification',
@@ -86,7 +84,7 @@ export function evaluateEnvironment(p: EnvironmentProbes): Capability[] {
           : p.notification === 'unsupported'
           ? '浏览器不支持'
           : '尚未授权',
-      hint: '授权后闹钟在后台也能提醒',
+      hint: '授权后闹钟在后台也能提醒，是震动之外唯一的兜底',
     },
     {
       id: 'wake-lock',
@@ -95,13 +93,6 @@ export function evaluateEnvironment(p: EnvironmentProbes): Capability[] {
       ok: p.wakeLock,
       detail: p.wakeLock ? '可用' : '浏览器不支持',
       hint: '没有它，手机熄屏会中断任务计时',
-    },
-    {
-      id: 'vibrate',
-      label: '震动反馈',
-      level: 'optional',
-      ok: p.vibrate,
-      detail: p.vibrate ? '可用' : '浏览器不支持',
     },
   ];
 }

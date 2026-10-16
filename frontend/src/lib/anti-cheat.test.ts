@@ -50,8 +50,10 @@ function feed(
 console.log('anti-cheat');
 
 check('a human-sloppy rhythm is never accused', () => {
-  // People vary by roughly this much between strokes.
-  for (const jitter of [0.15, 0.25, 0.4]) {
+  // People vary by roughly this much between strokes. The tightest case here
+  // (10%) is deliberately well inside human territory: the bar has to clear it
+  // by a wide margin, because being wrong means an alarm nobody can silence.
+  for (const jitter of [0.10, 0.15, 0.25, 0.4]) {
     const detector = new ShakeRegularity();
     feed(detector, 40, 140, jitter);
     assert.equal(
@@ -62,10 +64,29 @@ check('a human-sloppy rhythm is never accused', () => {
   }
 });
 
+check('an implausibly steady hand is still not accused too eagerly', () => {
+  // ±10% uniform jitter is a coefficient of variation around 0.058, which must
+  // stay above the 0.05 bar.
+  const detector = new ShakeRegularity();
+  feed(detector, 40, 140, 0.1);
+  const cv = detector.variation;
+  assert.ok(cv !== null && cv > 0.05, `variation ${cv}`);
+  assert.equal(detector.isMechanical, false);
+});
+
 check('a machine-steady rhythm is caught', () => {
   const detector = new ShakeRegularity();
   feed(detector, 30, 120, 0.005);
   assert.equal(detector.isMechanical, true, `variation ${detector.variation}`);
+});
+
+check('the bar leaves real headroom beneath it for machines', () => {
+  // A shaker is around 1-2%; the bar at 5% must still catch that comfortably.
+  const detector = new ShakeRegularity();
+  feed(detector, 30, 120, 0.015);
+  const cv = detector.variation;
+  assert.ok(cv !== null && cv < 0.05, `variation ${cv}`);
+  assert.equal(detector.isMechanical, true);
 });
 
 check('nothing is judged before the window is full', () => {

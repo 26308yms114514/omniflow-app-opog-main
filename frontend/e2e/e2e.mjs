@@ -91,30 +91,31 @@ function makeAlarm(overrides) {
 async function startMotion(page, mode) {
   await page.evaluate(modeName => {
     window.__motionStop = false;
-    let t = 0;
+    const startedAt = performance.now();
     let sign = 1;
-    let nextFlip = 0;
+    let nextFlipAt = 0;
 
     const tick = () => {
       if (window.__motionStop) return;
+      const elapsed = performance.now() - startedAt;
+
       let x = 0;
       let y = 0;
       let z = 9.81;
 
-      if (modeName === 'shake') {
-        if (t >= nextFlip) {
+      if (modeName === 'shake' || modeName === 'mechanical') {
+        // Scheduled against the wall clock, not accumulated per tick: polling
+        // faster than the stroke period is what makes the mechanical pattern
+        // genuinely steady. Reading `t += 20` into the interval inherited
+        // setTimeout's jitter (~8% variation), which is not how a fan behaves
+        // and was too irregular for the detector to judge.
+        if (elapsed >= nextFlipAt) {
           sign = -sign;
-          nextFlip = t + 80 + Math.random() * 180;
-        }
-        x = sign * 15;
-      } else if (modeName === 'mechanical') {
-        if (t >= nextFlip) {
-          sign = -sign;
-          nextFlip = t + 120;
+          nextFlipAt = elapsed + (modeName === 'mechanical' ? 120 : 80 + Math.random() * 180);
         }
         x = sign * 15;
       } else {
-        const magnitude = 9.81 + 6 * Math.sin(2 * Math.PI * 2 * (t / 1000));
+        const magnitude = 9.81 + 6 * Math.sin(2 * Math.PI * 2 * (elapsed / 1000));
         x = magnitude;
         y = 0;
         z = 0;
@@ -125,8 +126,7 @@ async function startMotion(page, mode) {
           accelerationIncludingGravity: { x, y, z },
         })
       );
-      t += 20;
-      setTimeout(tick, 20);
+      setTimeout(tick, 5);
     };
     tick();
   }, mode);
@@ -203,9 +203,9 @@ try {
   await page.reload({ waitUntil: 'load' });
   await page.waitForSelector('#root > *');
 
-  check('the seeded alarm is listed', await page.getByText('下次响铃').first().isVisible());
+  check('the seeded alarm is listed', await page.getByText('下次提醒').first().isVisible());
 
-  const tryListen = page.getByRole('button', { name: /试听/ }).first();
+  const tryListen = page.getByRole('button', { name: /试震动/ }).first();
   check('the test-sound button is offered once an alarm exists', (await tryListen.count()) > 0);
 
   await page.goto(`${HASH}#/task/e2e-alarm`, { waitUntil: 'load' });
@@ -328,8 +328,8 @@ try {
   check('shaking builds progress before the pause', beforePause > 0, `${beforePause}%`);
   check('pausing resets the progress to zero', afterPause === 0, `${afterPause}%`);
   check(
-    'the interruption is counted and the volume penalised',
-    /中断\s*1\s*次/.test(interruptText) && /音量\s*\+20%/.test(interruptText),
+    'the interruption is counted and the buzz intensified',
+    /中断\s*1\s*次/.test(interruptText) && /震动强度\s*\+20%/.test(interruptText),
     interruptText.replace(/\s+/g, ' ').slice(0, 90)
   );
 
@@ -637,6 +637,41 @@ try {
     'both task names are listed',
     statsText.includes('持续摇晃') && statsText.includes('原地踏步')
   );
+
+  // ---- every route renders without new errors ---------------------------
+  // Three of these — the 404 page and the two preview screens — had no
+  // coverage at all, and a route that throws is invisible until someone taps
+  // it.
+  const routes = [
+    { hash: '#/', expect: '强制清醒' },
+    { hash: '#/alarms', expect: '强制清醒' },
+    { hash: '#/edit/new', expect: '新增闹钟' },
+    { hash: '#/stats', expect: '起床统计' },
+    { hash: '#/f6db0085-1264-4a77-b32e-fa2731e8654f', expect: '强制清醒闹钟' },
+    { hash: '#/42ed530e-ac29-4218-87cd-e291989cf9c6', expect: '任务体验预览' },
+    { hash: '#/no-such-page', expect: '页面不存在' },
+    { hash: '#/task/missing-alarm', expect: '闹钟不存在' },
+  ];
+
+  for (const route of routes) {
+    const before = pageProblems.length;
+    await page.goto(`${HASH}${route.hash}`, { waitUntil: 'load' });
+    await page.waitForTimeout(350);
+    const text = await page.evaluate(() => document.body.innerText);
+
+    const rendered = text.includes(route.expect);
+    const quiet = pageProblems.length === before;
+    check(
+      `${route.hash} renders cleanly`,
+      rendered && quiet,
+      [
+        rendered ? null : `missing "${route.expect}"`,
+        quiet ? null : pageProblems.slice(before).join(' | '),
+      ]
+        .filter(Boolean)
+        .join(' ; ')
+    );
+  }
 
   // ---- no runtime errors ------------------------------------------------
   check(

@@ -41,7 +41,15 @@ export interface RegularityOptions {
 export const DEFAULT_REGULARITY_OPTIONS: RegularityOptions = {
   windowSize: 12,
   minSamples: 8,
-  maxCv: 0.08,
+  /**
+   * 5% variation, i.e. a stroke spacing that wanders by only about ±9%.
+   *
+   * Machine shakers sit around 1-2%, so there is ample room below this bar to
+   * catch them. It was 8% first, which left a hand that happened to wobble by
+   * ±13% only 9% short of being accused — too close for a judgement whose
+   * consequence is an alarm that cannot be silenced.
+   */
+  maxCv: 0.05,
   minIntervalMs: 40,
   maxIntervalMs: 1500,
 };

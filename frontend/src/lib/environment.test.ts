@@ -27,7 +27,6 @@ const healthy: EnvironmentProbes = {
   deviceMotion: true,
   wakeLock: true,
   vibrate: true,
-  audio: true,
   notification: 'granted',
 };
 
@@ -44,10 +43,9 @@ check('every capability is reported', () => {
   assert.deepEqual(ids, [
     'secure-context',
     'device-motion',
-    'audio',
+    'vibration',
     'notification',
     'wake-lock',
-    'vibrate',
   ]);
 });
 
@@ -75,9 +73,9 @@ check('a missing accelerometer is critical (the tasks would never advance)', () 
   assert.equal(summarizeEnvironment(evaluateEnvironment(probes)).ok, false);
 });
 
-check('missing Web Audio is critical (an alarm that cannot ring)', () => {
-  const probes = { ...healthy, audio: false };
-  assert.equal(find('audio', probes).level, 'critical');
+check('missing vibration is critical (the only alarm channel there is)', () => {
+  const probes = { ...healthy, vibrate: false };
+  assert.equal(find('vibration', probes).level, 'critical');
   assert.equal(summarizeEnvironment(evaluateEnvironment(probes)).ok, false);
 });
 
@@ -99,10 +97,9 @@ check('an unauthorised notification says so rather than claiming denial', () => 
   );
 });
 
-check('missing wake lock and vibration are only advisory', () => {
-  const probes = { ...healthy, wakeLock: false, vibrate: false };
+check('a missing wake lock is only advisory', () => {
+  const probes = { ...healthy, wakeLock: false };
   assert.equal(find('wake-lock', probes).level, 'recommended');
-  assert.equal(find('vibrate', probes).level, 'optional');
   assert.equal(summarizeEnvironment(evaluateEnvironment(probes)).ok, true);
 });
 
@@ -112,12 +109,11 @@ check('the summary lists precisely the failing capabilities', () => {
     deviceMotion: false,
     wakeLock: false,
     vibrate: false,
-    audio: false,
     notification: 'denied',
   };
   const summary = summarizeEnvironment(evaluateEnvironment(probes));
   assert.equal(summary.ok, false);
-  assert.equal(summary.failing.length, 6);
+  assert.equal(summary.failing.length, 5);
 });
 
 console.log(`\n${passed} checks passed`);

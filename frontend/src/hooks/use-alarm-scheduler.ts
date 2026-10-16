@@ -4,7 +4,7 @@ import { useAlarms } from './use-alarms';
 import type { Alarm } from '@/types/alarm';
 import { formatClock } from '@/types/alarm';
 import { dueAlarms, occurrenceOn, ringKey } from '@/lib/next-alarm';
-import { getAlarmSound } from '@/lib/alarm-sound';
+import { getVibrationAlarm } from '@/lib/vibration-alarm';
 import { vibrate } from '@/lib/motion';
 import {
   endRing,
@@ -87,15 +87,15 @@ export function useAlarmScheduler(): void {
     // The alarm may have been deleted while it was ringing; never chase a ghost.
     if (!alarmsRef.current.some(a => a.id === ring.alarmId)) {
       endRing();
-      getAlarmSound().stop();
+      getVibrationAlarm().stop();
       return;
     }
 
     navigate(target);
   }, [location.pathname, navigate]);
 
-  // Unlock audio (and ask for notification permission) on the very first user
-  // gesture, so an alarm hours later is still allowed to make noise.
+  // Register the notification worker (and ask for the permission) on the very
+  // first user gesture, so an alarm hours later can still reach the user.
   useEffect(() => {
     let handled = false;
 
@@ -106,7 +106,6 @@ export function useAlarmScheduler(): void {
       window.removeEventListener('keydown', onFirstGesture);
 
       await ensureServiceWorker();
-      await getAlarmSound().unlock();
 
       const hasEnabledAlarm = alarmsRef.current.some(a => a.enabled);
       if (hasEnabledAlarm && notificationPermission() === 'default') {
@@ -126,16 +125,18 @@ export function useAlarmScheduler(): void {
     const beginRing = async (alarm: Alarm, boostPercent = 0) => {
       startRing(alarm.id, Date.now(), boostPercent);
 
-      // Sound first: if navigation is somehow blocked the alarm still rings.
-      const sound = getAlarmSound();
-      if (await sound.unlock()) sound.start();
+      // Start buzzing first: if navigation is somehow blocked the alarm is
+      // still going. Vibration needs user activation, which the scheduler
+      // cannot supply, so a refusal here is expected — TaskExecution retries
+      // from inside the 开始任务 tap and the notification covers the rest.
+      getVibrationAlarm().start();
       vibrate([300, 150, 300, 150, 300]);
 
       void showAlarmNotification(
         `${formatTime(alarm)} 强制清醒`,
         alarm.label
-          ? `${alarm.label} · 完成动作任务才能关闭铃声`
-          : '起床时间到了，完成动作任务才能关闭铃声',
+          ? `${alarm.label} · 完成动作任务才能停止震动`
+          : '起床时间到了，完成动作任务才能停止震动',
         `alarm-${alarm.id}`,
         `#/task/${alarm.id}`
       );
@@ -146,7 +147,7 @@ export function useAlarmScheduler(): void {
 
     /**
      * Keep an in-force ring alive: re-route the user back to the task if they
-     * navigated away, make sure the siren is actually sounding (this is what
+     * navigated away, make sure the buzzer is actually going (this is what
      * restores it after a reload), and retire the ring when it times out.
      */
     const enforceRing = async (now: Date) => {
@@ -155,7 +156,7 @@ export function useAlarmScheduler(): void {
 
       if (isExpired(ring, now.getTime())) {
         endRing();
-        getAlarmSound().stop();
+        getVibrationAlarm().stop();
         return;
       }
 
@@ -163,15 +164,15 @@ export function useAlarmScheduler(): void {
       // otherwise the user is trapped on a task screen that says 闹钟不存在.
       if (!alarmsRef.current.some(a => a.id === ring.alarmId)) {
         endRing();
-        getAlarmSound().stop();
+        getVibrationAlarm().stop();
         return;
       }
 
       const target = `/task/${ring.alarmId}`;
       if (pathRef.current !== target) navigate(target);
 
-      const sound = getAlarmSound();
-      if (!sound.isRunning && (await sound.unlock())) sound.start();
+      const buzzer = getVibrationAlarm();
+      if (!buzzer.isRunning) buzzer.start();
     };
 
     const check = () => {

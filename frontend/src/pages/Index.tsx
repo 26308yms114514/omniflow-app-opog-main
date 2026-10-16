@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { BellRing, BarChart2, Plus, Zap, Shield, Clock, Volume2 } from 'lucide-react';
+import { BellRing, BarChart2, Plus, Zap, Shield, Clock, Vibrate } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import OmniflowBadge from '@/components/custom/OmniflowBadge';
 import EnvironmentCheck from '@/components/custom/EnvironmentCheck';
@@ -9,7 +9,8 @@ import { toast } from 'sonner';
 import { useAlarms } from '@/hooks/use-alarms';
 import { useNextAlarm } from '@/hooks/use-next-alarm';
 import { describeCountdown } from '@/lib/next-alarm';
-import { getAlarmSound } from '@/lib/alarm-sound';
+import { formatClock } from '@/types/alarm';
+import { getVibrationAlarm } from '@/lib/vibration-alarm';
 
 export default function Index() {
   const navigate = useNavigate();
@@ -26,28 +27,32 @@ export default function Index() {
   useEffect(() => {
     return () => {
       if (testTimerRef.current) window.clearTimeout(testTimerRef.current);
-      // Never leave a test tone running after the page goes away.
-      getAlarmSound().stop();
+      // Never leave a test buzz running after the page goes away.
+      getVibrationAlarm().stop();
     };
   }, []);
 
   /**
-   * Plays the siren for a few seconds. This doubles as the audio unlock: the
-   * user gesture here is what allows the real alarm to sound later.
+   * Buzzes for a few seconds so the user can feel whether the alarm channel
+   * works on their device at all — which is exactly what was impossible to
+   * tell when the app relied on a siren that stayed silent.
    */
-  const handleTestRing = async () => {
-    const sound = getAlarmSound();
-    const unlocked = await sound.unlock();
-    if (!unlocked) {
-      toast.error('浏览器拦截了声音，请再点一次');
+  const handleTestRing = () => {
+    const buzzer = getVibrationAlarm();
+    buzzer.setIntensity(1);
+    const started = buzzer.start();
+    if (!started) {
+      toast.error(
+        buzzer.isSupported
+          ? '设备拒绝了震动，请检查系统震动设置'
+          : '这个浏览器不支持震动'
+      );
       return;
     }
-    sound.setBoost(1);
-    sound.start();
     setTesting(true);
     if (testTimerRef.current) window.clearTimeout(testTimerRef.current);
     testTimerRef.current = window.setTimeout(() => {
-      sound.stop();
+      buzzer.stop();
       setTesting(false);
     }, 3000);
   };
@@ -115,10 +120,9 @@ export default function Index() {
                 <Clock className={`w-5 h-5 ${testing ? 'text-primary-foreground' : 'text-primary'}`} />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-xs text-muted-foreground">下次响铃</p>
+                <p className="text-xs text-muted-foreground">下次提醒</p>
                 <p className="font-semibold text-foreground truncate">
-                  {String(next.alarm.hour).padStart(2, '0')}:
-                  {String(next.alarm.minute).padStart(2, '0')}
+                  {formatClock(next.alarm.hour, next.alarm.minute)}
                   {next.alarm.label ? ` · ${next.alarm.label}` : ''}
                 </p>
                 <p className="text-xs text-muted-foreground mt-0.5">
@@ -126,11 +130,11 @@ export default function Index() {
                 </p>
               </div>
               <button
-                onClick={() => void handleTestRing()}
+                onClick={handleTestRing}
                 className="shrink-0 flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-xl border border-border hover:border-primary/50 transition-colors cursor-pointer"
               >
-                <Volume2 className="w-3.5 h-3.5" />
-                {testing ? '响铃中' : '试听'}
+                <Vibrate className="w-3.5 h-3.5" />
+                {testing ? '震动中' : '试震动'}
               </button>
             </div>
             <p className="text-[11px] text-muted-foreground mt-3 leading-relaxed">
@@ -214,7 +218,7 @@ export default function Index() {
               </div>
               <div>
                 <p className="text-sm font-semibold text-foreground">执行动作任务</p>
-                <p className="text-xs text-muted-foreground mt-0.5">持续摇晃、踏步等，中断即清零并提升音量</p>
+                <p className="text-xs text-muted-foreground mt-0.5">持续摇晃、踏步等，中断即清零并增强震动</p>
               </div>
             </div>
             <div className="flex items-start gap-3">

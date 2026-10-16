@@ -1,7 +1,7 @@
 import { useNavigate } from 'react-router-dom';
 import {
   BellRing, Zap, Shield, BarChart2, Clock, ChevronRight,
-  Star, CheckCircle2, ArrowRight, Smartphone, Volume2, AlertTriangle
+  Star, CheckCircle2, ArrowRight, Smartphone, Vibrate, AlertTriangle
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -13,21 +13,21 @@ const FEATURES = [
     color: 'text-violet-500',
     bg: 'bg-violet-500/10',
     title: '全屏锁定界面',
-    desc: '闹钟响起后进入全屏锁定，返回键、Home 键、音量键全部屏蔽，无法在半睡状态绕过任务。',
+    desc: '闹钟触发后进入全屏锁定，返回键、Home 键全部屏蔽，无法在半睡状态绕过任务。',
   },
   {
     icon: Zap,
     color: 'text-orange-500',
     bg: 'bg-orange-500/10',
     title: '动作任务引擎',
-    desc: '持续摇晃、原地踏步等多种任务，动作中断超时即清零进度并提升音量，强制保持持续动作。',
+    desc: '持续摇晃、原地踏步两种任务，动作中断超时即清零进度并增强震动，强制保持持续动作。',
   },
   {
-    icon: Volume2,
+    icon: Vibrate,
     color: 'text-red-500',
     bg: 'bg-red-500/10',
     title: '中断惩罚机制',
-    desc: '每次动作中断超过容忍时限，进度立即归零，铃声音量自动增大 20%，上限为系统最大音量。',
+    desc: '每次动作中断超过容忍时限，进度立即归零，震动强度自动增强 20%，上限为设备最强震动。',
   },
   {
     icon: Shield,
@@ -69,7 +69,7 @@ const STATS = [
 
 const FLOW_STEPS = [
   { step: '01', icon: BellRing, color: 'text-violet-500', bg: 'bg-violet-500/10', title: '闹钟触发', desc: '进入全屏锁定界面，系统按键全部屏蔽，无法绕过' },
-  { step: '02', icon: Zap, color: 'text-orange-500', bg: 'bg-orange-500/10', title: '执行动作任务', desc: '持续摇晃或踏步，中断即清零并自动提升铃声音量' },
+  { step: '02', icon: Zap, color: 'text-orange-500', bg: 'bg-orange-500/10', title: '执行动作任务', desc: '持续摇晃或踏步，中断即清零并自动增强震动' },
   { step: '03', icon: AlertTriangle, color: 'text-red-500', bg: 'bg-red-500/10', title: '防作弊检测', desc: '实时识别机械晃动、躺卧假步等作弊行为并拦截' },
   { step: '04', icon: CheckCircle2, color: 'text-green-500', bg: 'bg-green-500/10', title: '任务达标关闭', desc: '闹钟关闭，展示本次起床表现与历史均值对比' },
 ];

@@ -95,11 +95,28 @@ export function accelerationDelta(a: AccelSample, b: AccelSample): number {
   );
 }
 
-/** Feature-detected vibration. Android supports it; iOS Safari does not. */
-export function vibrate(pattern: number | number[]): boolean {
+/**
+ * Whether the platform will accept a vibration call right now.
+ *
+ * Chrome refuses — and logs a console error for — vibration from a frame the
+ * user has never interacted with ("Blocked call to navigator.vibrate…"), so
+ * every caller checks first. Reporting a refusal we cannot see would be worse
+ * than not asking: it is silent, and this app vibrates as its alarm.
+ */
+export function vibrationAllowed(): boolean {
   if (typeof navigator === 'undefined' || typeof navigator.vibrate !== 'function') {
     return false;
   }
+  const activation = (navigator as unknown as {
+    userActivation?: { hasBeenActive?: boolean };
+  }).userActivation;
+  // Absent on browsers that do not implement the flag; assume allowed there.
+  return activation?.hasBeenActive !== false;
+}
+
+/** Feature-detected one-shot vibration. Android supports it; iOS Safari does not. */
+export function vibrate(pattern: number | number[]): boolean {
+  if (!vibrationAllowed()) return false;
   try {
     return navigator.vibrate(pattern);
   } catch {

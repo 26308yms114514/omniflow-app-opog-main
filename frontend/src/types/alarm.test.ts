@@ -13,10 +13,11 @@ import {
   TASK_ICONS,
   TASK_LABELS,
   TASK_TYPES,
+  describeRepeat,
   normalizeAlarm,
   normalizeTaskType,
 } from './alarm';
-import type { Alarm } from './alarm';
+import type { Alarm, RepeatDays } from './alarm';import { nextOccurrence } from '../lib/next-alarm';
 
 let passed = 0;
 function check(name: string, fn: () => void) {
@@ -100,6 +101,42 @@ check('normalizeAlarm rewrites a removed task type', () => {
 check('normalizeAlarm tolerates a malformed config', () => {
   const broken = { id: 'x' } as unknown as Alarm;
   assert.doesNotThrow(() => normalizeAlarm(broken));
+});
+
+const days = (on: (keyof RepeatDays)[]) => {
+  const base: RepeatDays = { mon: false, tue: false, wed: false, thu: false, fri: false, sat: false, sun: false };
+  for (const day of on) base[day] = true;
+  return base;
+};
+
+check('a full week reads as every day', () => {
+  assert.equal(describeRepeat(days(['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'])), '每天');
+});
+
+check('an empty day set reads as every day, not once', () => {
+  // The alarm list used to say 仅一次 here while the scheduler ran it daily.
+  assert.equal(describeRepeat(days([])), '每天');
+});
+
+check('weekdays and weekends get their own wording', () => {
+  assert.equal(describeRepeat(days(['mon', 'tue', 'wed', 'thu', 'fri'])), '工作日');
+  assert.equal(describeRepeat(days(['sat', 'sun'])), '周末');
+});
+
+check('a mixed selection lists the days', () => {
+  assert.equal(describeRepeat(days(['tue', 'thu'])), '每周 二 四');
+  assert.equal(describeRepeat(days(['mon', 'sat'])), '每周 一 六');
+});
+
+check('the wording agrees with when the alarm actually rings', () => {
+  // The card and the scheduler must never disagree about an empty day set.
+  const empty = days([]);
+  assert.equal(describeRepeat(empty), '每天');
+
+  const alarm = { ...makeAlarm('shake'), repeat: empty };
+  const friday = new Date(2026, 9, 16, 8, 0); // past 07:00
+  // Daily means tomorrow, not "never" and not "only once".
+  assert.deepEqual(nextOccurrence(alarm, friday), new Date(2026, 9, 17, 7, 0));
 });
 
 console.log(`\n${passed} checks passed`);

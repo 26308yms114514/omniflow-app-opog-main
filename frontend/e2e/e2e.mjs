@@ -418,6 +418,15 @@ try {
     (await page.evaluate(() => document.body.innerText)).includes('E2E 新建')
   );
 
+  // The card used to say 仅一次 when no day was selected while the scheduler ran
+  // it daily; the default weekday set must read as 工作日.
+  await page.goto(`${HASH}#/alarms`, { waitUntil: 'load' });
+  await page.waitForSelector('text=E2E 新建', { timeout: 10_000 });
+  check(
+    'the card describes when the alarm will actually ring',
+    (await page.evaluate(() => document.body.innerText)).includes('工作日')
+  );
+
   // ---- no runtime errors ------------------------------------------------
   check(
     'no uncaught errors reached the page',

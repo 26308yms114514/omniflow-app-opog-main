@@ -1,4 +1,4 @@
-import { Alarm, TASK_ICONS, TASK_LABELS, DAY_LABELS, DAY_DISPLAY } from '@/types/alarm';
+import { Alarm, TASK_ICONS, TASK_LABELS, describeRepeat } from '@/types/alarm';
 import { Switch } from '@/components/ui/switch';
 import { Button } from '@/components/ui/button';
 import { Pencil, Trash2 } from 'lucide-react';
@@ -12,7 +12,7 @@ interface Props {
 }
 
 export default function AlarmCard({ alarm, onToggle, onEdit, onDelete, onRing }: Props) {
-  const repeatText = DAY_LABELS.filter(d => alarm.repeat[d]).map(d => DAY_DISPLAY[d]).join(' ');
+  const repeatText = describeRepeat(alarm.repeat);
   const timeStr = `${String(alarm.hour).padStart(2, '0')}:${String(alarm.minute).padStart(2, '0')}`;
 
   return (
@@ -39,11 +39,7 @@ export default function AlarmCard({ alarm, onToggle, onEdit, onDelete, onRing }:
             <span className="inline-flex items-center gap-1 text-xs bg-primary/10 text-primary rounded-full px-2 py-0.5 font-medium">
               {TASK_ICONS[alarm.config.taskType]} {TASK_LABELS[alarm.config.taskType]}
             </span>
-            {repeatText ? (
-              <span className="text-xs text-muted-foreground">每周 {repeatText}</span>
-            ) : (
-              <span className="text-xs text-muted-foreground">仅一次</span>
-            )}
+            <span className="text-xs text-muted-foreground">{repeatText}</span>
           </div>
         </div>
         <Switch checked={alarm.enabled} onCheckedChange={onToggle} />
@@ -53,7 +49,7 @@ export default function AlarmCard({ alarm, onToggle, onEdit, onDelete, onRing }:
         <Button
           variant="ghost"
           size="sm"
-          className="flex-1 text-xs h-8"
+          className="flex-1 text-xs h-10"
           onClick={onEdit}
         >
           <Pencil className="w-3 h-3 mr-1" /> 编辑
@@ -61,7 +57,7 @@ export default function AlarmCard({ alarm, onToggle, onEdit, onDelete, onRing }:
         <Button
           variant="ghost"
           size="sm"
-          className="flex-1 text-xs h-8 text-primary hover:text-primary"
+          className="flex-1 text-xs h-10 text-primary hover:text-primary"
           onClick={onRing}
         >
           ▶ 测试
@@ -69,7 +65,7 @@ export default function AlarmCard({ alarm, onToggle, onEdit, onDelete, onRing }:
         <Button
           variant="ghost"
           size="sm"
-          className="flex-1 text-xs h-8 text-destructive hover:text-destructive"
+          className="flex-1 text-xs h-10 text-destructive hover:text-destructive"
           onClick={onDelete}
         >
           <Trash2 className="w-3 h-3 mr-1" /> 删除

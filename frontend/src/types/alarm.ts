@@ -129,3 +129,27 @@ export const DAY_DISPLAY: Record<keyof RepeatDays, string> = {
   sat: '六',
   sun: '日',
 };
+
+const WEEKDAYS: (keyof RepeatDays)[] = ['mon', 'tue', 'wed', 'thu', 'fri'];
+const WEEKEND: (keyof RepeatDays)[] = ['sat', 'sun'];
+
+/**
+ * Human-readable repeat summary.
+ *
+ * An empty day set is deliberately reported as 每天 rather than 仅一次: that is
+ * what `nextOccurrence` does with it, and the editor warns about it. The alarm
+ * list used to say 仅一次 in that case, contradicting both.
+ */
+export function describeRepeat(repeat: RepeatDays): string {
+  const selected = DAY_LABELS.filter(day => repeat[day]);
+  if (selected.length === 0 || selected.length === 7) return '每天';
+
+  const isOnly = (days: (keyof RepeatDays)[]) =>
+    days.every(day => repeat[day]) &&
+    DAY_LABELS.filter(day => !days.includes(day)).every(day => !repeat[day]);
+
+  if (isOnly(WEEKDAYS)) return '工作日';
+  if (isOnly(WEEKEND)) return '周末';
+
+  return `每周 ${selected.map(day => DAY_DISPLAY[day]).join(' ')}`;
+}

@@ -214,6 +214,47 @@ try {
   check('marching counts real steps', stepText > 0, `counted ${stepText} steps`);
   await stopMotion(page);
 
+  // ---- interrupt penalty -------------------------------------------------
+  // The rule "stop moving and the progress resets" had only ever been unit
+  // tested; this drives it through the real timer and detector.
+  await page.evaluate(alarm => {
+    localStorage.removeItem('active_ring_v1');
+    localStorage.removeItem('snoozed_alarm_v1');
+    localStorage.setItem('alarms_v1', JSON.stringify([alarm]));
+  }, makeAlarm({
+    id: 'e2e-interrupt',
+    config: {
+      ...makeAlarm().config,
+      duration: 20,
+      interruptTolerance: 1,
+      difficulty: 'medium',
+    },
+  }));
+  await page.evaluate(() => {
+    location.hash = '#/';
+  });
+  await page.reload({ waitUntil: 'load' });
+  await page.goto(`${HASH}#/task/e2e-interrupt`, { waitUntil: 'load' });
+  await page.waitForSelector('text=开始任务', { timeout: 10_000 });
+
+  await startMotion(page, 'shake');
+  await page.getByRole('button', { name: '开始任务' }).click();
+  await page.waitForTimeout(2000);
+  const beforePause = await readProgress(page);
+  await stopMotion(page);
+  // One second of tolerance, plus the 1.5 s recovery screen.
+  await page.waitForTimeout(6000);
+
+  const afterPause = await readProgress(page);
+  const interruptText = await page.evaluate(() => document.body.innerText);
+  check('shaking builds progress before the pause', beforePause > 0, `${beforePause}%`);
+  check('pausing resets the progress to zero', afterPause === 0, `${afterPause}%`);
+  check(
+    'the interruption is counted and the volume penalised',
+    /中断\s*1\s*次/.test(interruptText) && /音量\s*\+20%/.test(interruptText),
+    interruptText.replace(/\s+/g, ' ').slice(0, 90)
+  );
+
   // ---- core loop: a due alarm launches, traps, then releases -----------
   await stopMotion(page);
 
@@ -258,6 +299,22 @@ try {
   await stopMotion(page);
   check('serving the full duration completes the task', true);
 
+  // The completed screen is taller than a small phone; if the body were still
+  // `overflow: hidden` the buttons would be clipped out of reach.
+  check(
+    'the body lock is released on the completion screen',
+    await page.evaluate(() => !document.body.classList.contains('task-locked'))
+  );
+
+  await page.setViewportSize({ width: 360, height: 560 });
+  await page.waitForTimeout(300);
+  const homeButton = page.getByRole('button', { name: '返回首页' });
+  check(
+    'the completion screen still offers a reachable way out on a small phone',
+    (await homeButton.count()) > 0 && (await homeButton.isVisible())
+  );
+  await page.setViewportSize({ width: 393, height: 851 });
+
   check(
     'completing the task clears the ring',
     (await page.evaluate(() => localStorage.getItem('active_ring_v1'))) === 'null'
@@ -268,6 +325,15 @@ try {
   });
   await page.waitForTimeout(700);
   check('after completion the user may leave', page.url().endsWith('#/'), page.url());
+
+  // A finished alarm must not re-fire while it is still inside the catch-up
+  // window; wait past one scheduler tick to be sure.
+  await page.waitForTimeout(16_000);
+  check(
+    'a completed alarm does not ring again',
+    page.url().endsWith('#/'),
+    page.url()
+  );
 
   // ---- snooze ----------------------------------------------------------
   await page.evaluate(alarm => {

@@ -36,6 +36,16 @@ const phoneTesting = hasCert
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  /**
+   * Relative asset URLs, so one build works wherever it is served from: a
+   * domain root, a sub-path such as a GitHub Pages project site, or a file
+   * opened directly. Absolute `/assets/...` paths break the moment the site is
+   * not at the root, which is exactly what a project page is.
+   *
+   * Safe with HashRouter: the document URL never gains a path segment, so
+   * `./sw.js` and `./manifest.webmanifest` keep resolving next to index.html.
+   */
+  base: './',
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),

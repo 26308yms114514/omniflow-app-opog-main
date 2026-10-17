@@ -14,7 +14,8 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "typecheck:build": "tsc --noEmit && vite build",
-    "lint:typecheck": "eslint . && tsc --noEmit"
+    "lint:typecheck": "eslint . && tsc --noEmit",
+    "deploy:pages": "node scripts/deploy-pages.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

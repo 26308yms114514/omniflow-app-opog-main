@@ -208,6 +208,16 @@ try {
   const tryListen = page.getByRole('button', { name: /试响铃/ }).first();
   check('the test-sound button is offered once an alarm exists', (await tryListen.count()) > 0);
 
+  // With the screen off the notification is the only channel left, and on this
+  // origin the permission was never granted — so the user must be told, and
+  // offered the one tap that fixes it.
+  const homeText = await page.evaluate(() => document.body.innerText);
+  check(
+    'an armed alarm without notification permission warns the user',
+    homeText.includes('还没有通知权限') && homeText.includes('开启通知提醒'),
+    homeText.replace(/\s+/g, ' ').slice(0, 90)
+  );
+
   await page.goto(`${HASH}#/task/e2e-alarm`, { waitUntil: 'load' });
   await page.waitForSelector('text=开始任务', { timeout: 10_000 });
   check('the task screen opens from a seeded alarm', true);
@@ -710,6 +720,48 @@ try {
     pageProblems.length === 0,
     pageProblems.slice(0, 3).join(' | ')
   );
+
+  // ---- a browser that cannot show notifications at all ------------------
+  // The user cannot fix this, so it must be reported as a limitation rather
+  // than a failure — and the home screen must not offer a button that cannot
+  // do anything. Simulated by removing the API before the app loads.
+  const noNotifyContext = await browser.newContext({
+    ...devices['Pixel 5'],
+    ignoreHTTPSErrors: true,
+  });
+  await noNotifyContext.addInitScript(() => {
+    // eslint-disable-next-line no-undef
+    delete window.Notification;
+  });
+  const noNotifyPage = await noNotifyContext.newPage();
+
+  try {
+    await noNotifyPage.goto(HASH, { waitUntil: 'load' });
+    await noNotifyPage.waitForSelector('#root > *', { timeout: 15_000 });
+    await noNotifyPage.evaluate(alarm => {
+      localStorage.setItem('alarms_v1', JSON.stringify([alarm]));
+    }, makeAlarm({ id: 'e2e-no-notify' }));
+    await noNotifyPage.reload({ waitUntil: 'load' });
+    await noNotifyPage.waitForSelector('#root > *');
+    await noNotifyPage.waitForTimeout(600);
+
+    const bareText = await noNotifyPage.evaluate(() => document.body.innerText);
+    check(
+      'a browser without notifications is reported as a limitation',
+      bareText.includes('不支持系统通知') &&
+        !bareText.includes('还没有通知权限') &&
+        // No dead-end button: there is nothing the user could grant.
+        !bareText.includes('开启通知提醒'),
+      bareText.replace(/\s+/g, ' ').slice(0, 100)
+    );
+    check(
+      'and it does not count as a failing capability',
+      !/关键能力不可用/.test(bareText),
+      (bareText.match(/.{0,40}关键能力不可用.{0,20}/) || ['(none)'])[0]
+    );
+  } finally {
+    await noNotifyContext.close();
+  }
 
   // ---- notification channel over a trustworthy origin -------------------
   // Chrome treats http://127.0.0.1 as a secure context, which makes this the

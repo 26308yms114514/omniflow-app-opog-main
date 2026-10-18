@@ -87,7 +87,16 @@ export function evaluateEnvironment(p: EnvironmentProbes): Capability[] {
     {
       id: 'notification',
       label: '系统通知',
-      level: 'critical',
+      /**
+       * Critical only when the user can actually do something about it.
+       *
+       * A browser that cannot show notifications at all is not a fixable
+       * fault — the alarm still works while the page is open — so failing the
+       * checklist there just puts a permanent red cross on a phone nobody can
+       * repair. A permission that was never granted is one tap away and
+       * genuinely matters: with the screen off it is the only channel left.
+       */
+      level: p.notification === 'unsupported' ? 'recommended' : 'critical',
       ok: p.notification === 'granted',
       detail:
         p.notification === 'granted'
@@ -95,11 +104,12 @@ export function evaluateEnvironment(p: EnvironmentProbes): Capability[] {
           : p.notification === 'denied'
           ? '已被拒绝'
           : p.notification === 'unsupported'
-          ? '浏览器不支持'
+          ? '本浏览器不支持，只能靠响铃和震动'
           : '尚未授权',
-      // The Vibration API spec forbids vibrating while the document is hidden,
-      // so an alarm that fires with the phone asleep has no other channel.
-      hint: '手机锁屏或熄屏时，通知是唯一还能提醒你的通道，请务必授权',
+      hint:
+        p.notification === 'unsupported'
+          ? '没有通知也能用：页面开着时响铃和震动照常工作，但手机锁屏后就没有任何提醒了'
+          : '手机锁屏或熄屏时，通知是唯一还能提醒你的通道，请务必授权',
     },
     {
       id: 'wake-lock',

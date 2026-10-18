@@ -13,11 +13,15 @@ export type NotifyPermission = 'granted' | 'denied' | 'default' | 'unsupported';
 
 let registrationPromise: Promise<ServiceWorkerRegistration | null> | null = null;
 
-export function notificationsSupported(): boolean {
-  if (typeof window === 'undefined') return false;
-  return 'Notification' in window || 'serviceWorker' in navigator;
-}
-
+/**
+ * The single answer to "can this browser raise a notification?".
+ *
+ * The permission model lives on `window.Notification`, and a service worker
+ * alone is not enough to show one — so `'Notification' in window` is the test.
+ * A second `notificationsSupported()` helper used to exist beside this one and
+ * disagreed with it (it accepted a service worker without the API); it was
+ * never called, so it is gone rather than left as a trap.
+ */
 export function notificationPermission(): NotifyPermission {
   if (typeof window === 'undefined' || !('Notification' in window)) {
     return 'unsupported';

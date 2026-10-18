@@ -104,6 +104,17 @@ check('a denied notification is critical (the only channel on a locked phone)', 
   assert.equal(summarizeEnvironment(evaluateEnvironment(probes)).ok, false);
 });
 
+check('a browser without notifications is a limitation, not a failure', () => {
+  // The user cannot fix this, and the alarm still works while the page is
+  // open, so a permanent red cross would be both wrong and unactionable.
+  const probes = { ...healthy, notification: 'unsupported' as const };
+  const cap = find('notification', probes);
+  assert.equal(cap.ok, false);
+  assert.equal(cap.level, 'recommended');
+  assert.equal(summarizeEnvironment(evaluateEnvironment(probes)).ok, true);
+  assert.ok((cap.hint ?? '').includes('锁屏'), cap.hint);
+});
+
 check('the alarm-output hint warns about the locked screen', () => {
   const hint = find('alarm-output', healthy).hint ?? '';
   assert.ok(hint.includes('锁屏'), hint);
@@ -114,7 +125,7 @@ check('an unauthorised notification says so rather than claiming denial', () => 
   assert.equal(find('notification', { ...healthy, notification: 'denied' }).detail, '已被拒绝');
   assert.equal(
     find('notification', { ...healthy, notification: 'unsupported' }).detail,
-    '浏览器不支持'
+    '本浏览器不支持，只能靠响铃和震动'
   );
 });
 

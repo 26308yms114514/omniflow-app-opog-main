@@ -161,8 +161,16 @@ export default function Index() {
             </div>
             {notifyPermission === 'granted' ? (
               <p className="text-[11px] text-muted-foreground mt-3 leading-relaxed">
-                屏幕亮着时用震动提醒；手机锁屏后震动不会生效（浏览器限制），
+                屏幕亮着时用响铃和震动提醒；手机锁屏后震动不会生效（浏览器限制），
                 改由系统通知提醒，请保持页面在后台运行。
+              </p>
+            ) : notifyPermission === 'unsupported' ? (
+              // Nothing to offer here: the browser has no Notification API, so
+              // a button would be a dead end. Say what still works instead.
+              <p className="text-[11px] text-muted-foreground mt-3 leading-relaxed">
+                这个浏览器不支持系统通知。页面开着时响铃和震动照常工作，
+                但<strong className="text-amber-700">手机锁屏后不会有任何提醒</strong>——
+                录制或测试时请让屏幕保持亮着。
               </p>
             ) : (
               <div className="mt-3 rounded-xl border border-amber-500/40 bg-amber-500/5 p-3">

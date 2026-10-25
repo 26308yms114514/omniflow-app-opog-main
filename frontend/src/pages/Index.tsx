@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { BellRing, BarChart2, Plus, Zap, Shield, Clock, Vibrate } from 'lucide-react';
+import { BellRing, BarChart2, Plus, Zap, Shield, Clock, Vibrate, UserRound, LogOut } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import OmniflowBadge from '@/components/custom/OmniflowBadge';
 import EnvironmentCheck from '@/components/custom/EnvironmentCheck';
@@ -8,18 +8,32 @@ import { Toaster } from '@/components/ui/sonner';
 import { toast } from 'sonner';
 import { useAlarms } from '@/hooks/use-alarms';
 import { useNextAlarm } from '@/hooks/use-next-alarm';
+import { useCurrentUser } from '@/hooks/use-current-user';
 import { describeCountdown } from '@/lib/next-alarm';
 import { formatClock } from '@/types/alarm';
 import { getAlarmOutput } from '@/lib/alarm-output';
 import { notificationPermission, requestNotificationPermission } from '@/lib/notify';
+import { logout } from '@/lib/auth';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
 export default function Index() {
   const navigate = useNavigate();
+  const user = useCurrentUser();
   const { alarms, sessions } = useAlarms();
   const next = useNextAlarm(alarms);
   const [testing, setTesting] = useState(false);
   const testTimerRef = useRef<number | null>(null);
   const [notifyPermission, setNotifyPermission] = useState(notificationPermission);
+  const [confirmLogout, setConfirmLogout] = useState(false);
 
   const total = sessions.length;
   const successful = sessions.filter(s => s.success).length;
@@ -94,9 +108,23 @@ export default function Index() {
               <p className="text-[10px] text-muted-foreground leading-tight">赖床终结者</p>
             </div>
           </div>
-          <Button variant="ghost" size="icon" onClick={() => navigate('/stats')} className="cursor-pointer">
-            <BarChart2 className="w-5 h-5" />
-          </Button>
+          <div className="flex items-center gap-1">
+            <span className="flex items-center gap-1 text-[11px] text-muted-foreground px-1">
+              <UserRound className="w-3.5 h-3.5" />
+              {user?.nickname ?? '账号'}
+            </span>
+            <button
+              onClick={() => setConfirmLogout(true)}
+              className="p-2 rounded-lg text-muted-foreground cursor-pointer"
+              title="退出账号"
+              aria-label="退出账号"
+            >
+              <LogOut className="w-4 h-4" />
+            </button>
+            <Button variant="ghost" size="icon" onClick={() => navigate('/stats')} className="cursor-pointer">
+              <BarChart2 className="w-5 h-5" />
+            </Button>
+          </div>
         </div>
       </header>
 
@@ -306,6 +334,30 @@ export default function Index() {
 
       <OmniflowBadge />
       <Toaster />
+
+      <AlertDialog open={confirmLogout} onOpenChange={setConfirmLogout}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>退出「{user?.nickname}」？</AlertDialogTitle>
+            <AlertDialogDescription>
+              闹钟和统计不会删除，重新登录就能看到。但退出后没有账号守护，
+              这台设备上任何人都能打开应用。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                setConfirmLogout(false);
+                logout();
+                toast.success('已退出');
+              }}
+            >
+              退出
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

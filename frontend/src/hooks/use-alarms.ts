@@ -1,5 +1,6 @@
 import { useState, useCallback, useMemo } from 'react';
 import { useLocalStorage } from './use-localStorage';
+import { scopedKey } from '../lib/auth';
 import {
   Alarm,
   AlarmSession,
@@ -9,8 +10,14 @@ import {
 } from '../types/alarm';
 
 export function useAlarms() {
-  const [storedAlarms, setAlarms] = useLocalStorage<Alarm[]>('alarms_v1', []);
-  const [sessions, setSessions] = useLocalStorage<AlarmSession[]>('sessions_v1', []);
+  // Scoped to the signed-in account, so two people sharing a phone never see
+  // each other's alarms. The tree remounts when the account changes (App.tsx
+  // keys the router on the user), so these are stable for the life of a mount.
+  const alarmKey = useMemo(() => scopedKey('alarms_v1'), []);
+  const sessionKey = useMemo(() => scopedKey('sessions_v1'), []);
+
+  const [storedAlarms, setAlarms] = useLocalStorage<Alarm[]>(alarmKey, []);
+  const [sessions, setSessions] = useLocalStorage<AlarmSession[]>(sessionKey, []);
 
   // Alarms persisted by an older build may name a task type that no longer
   // exists; normalise on read so the editor and the task screen never see one.

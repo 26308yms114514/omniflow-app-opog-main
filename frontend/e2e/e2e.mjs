@@ -182,12 +182,64 @@ page.on('console', message => {
 
 console.log(`app: ${HASH}`);
 
+/**
+ * Installs the storage-key helper every seeding step uses.
+ *
+ * Alarms and sessions are namespaced per account, so a test that writes to the
+ * bare `alarms_v1` key writes somewhere the app will never read. This resolves
+ * the same suffix the app does, from the signed-in session.
+ */
+const SCOPED_HELPER = () => {
+  window.__scoped = base => {
+    try {
+      const session = JSON.parse(localStorage.getItem('auth_session_v1') || 'null');
+      return session && session.userId ? `${base}::${session.userId}` : base;
+    } catch {
+      return base;
+    }
+  };
+};
+
+await context.addInitScript(SCOPED_HELPER);
+
+/**
+ * Register through the UI and wait for the app behind the gate.
+ *
+ * Used for the main context and for each extra context: localStorage is
+ * per-context, so every one of them starts signed out.
+ */
+async function signUp(target, nickname = 'E2E测试') {
+  await target.getByPlaceholder(/2~16/).fill(nickname);
+  await target.getByPlaceholder(/至少 6 位/).fill('e2epassword');
+  await target.getByRole('button', { name: /创建账号/ }).click();
+  await target.waitForSelector('text=环境自检', { timeout: 15_000 });
+}
+
 try {
   // ---- boot -------------------------------------------------------------
   const response = await page.goto(HASH, { waitUntil: 'load', timeout: 30_000 });
   check('the page loads', !!response && response.status() === 200, `status ${response?.status()}`);
   await page.waitForSelector('#root > *', { timeout: 15_000 });
   check('React mounts something into #root', true);
+
+  // ---- accounts ---------------------------------------------------------
+  // Everything below reads per-account storage, so the very first thing this
+  // suite does is register the account it will use throughout.
+  check(
+    'a signed-out visitor is stopped at the account screen',
+    (await page.evaluate(() => document.body.innerText)).includes('本机账号'),
+    'no account gate'
+  );
+
+  await signUp(page);
+
+  // The password must never be readable back out of storage.
+  const storedUsers = await page.evaluate(() => localStorage.getItem('auth_users_v1'));
+  check(
+    'the password is not stored in plain text',
+    !!storedUsers && !storedUsers.includes('e2epassword'),
+    String(storedUsers).slice(0, 80)
+  );
 
   const heading = await page.locator('h1', { hasText: '强制清醒' }).first().textContent();
   check('the home screen renders its heading', heading?.includes('强制清醒'), String(heading));
@@ -198,7 +250,7 @@ try {
 
   // ---- shake task -------------------------------------------------------
   await page.evaluate(alarm => {
-    localStorage.setItem('alarms_v1', JSON.stringify([alarm]));
+    localStorage.setItem(window.__scoped('alarms_v1'), JSON.stringify([alarm]));
   }, makeAlarm());
   await page.reload({ waitUntil: 'load' });
   await page.waitForSelector('#root > *');
@@ -314,7 +366,7 @@ try {
 
   // ---- march task -------------------------------------------------------
   await page.evaluate(alarm => {
-    localStorage.setItem('alarms_v1', JSON.stringify([alarm]));
+    localStorage.setItem(window.__scoped('alarms_v1'), JSON.stringify([alarm]));
   }, makeAlarm({
     id: 'e2e-steps',
     config: { ...makeAlarm().config, taskType: 'steps', count: 10 },
@@ -339,7 +391,7 @@ try {
   await page.evaluate(alarm => {
     localStorage.removeItem('active_ring_v1');
     localStorage.removeItem('snoozed_alarm_v1');
-    localStorage.setItem('alarms_v1', JSON.stringify([alarm]));
+    localStorage.setItem(window.__scoped('alarms_v1'), JSON.stringify([alarm]));
   }, makeAlarm({
     id: 'e2e-interrupt',
     config: {
@@ -379,7 +431,7 @@ try {
   // second elapsed timer — and the clock ran at double speed.
   await page.evaluate(alarm => {
     localStorage.removeItem('active_ring_v1');
-    localStorage.setItem('alarms_v1', JSON.stringify([alarm]));
+    localStorage.setItem(window.__scoped('alarms_v1'), JSON.stringify([alarm]));
   }, makeAlarm({
     id: 'e2e-double-tap',
     config: {
@@ -431,7 +483,7 @@ try {
   await page.evaluate(alarm => {
     localStorage.removeItem('active_ring_v1');
     localStorage.removeItem('snoozed_alarm_v1');
-    localStorage.setItem('alarms_v1', JSON.stringify([alarm]));
+    localStorage.setItem(window.__scoped('alarms_v1'), JSON.stringify([alarm]));
   }, makeAlarm({ id: 'e2e-due', ...dueTime }));
   await page.evaluate(() => {
     location.hash = '#/';
@@ -504,7 +556,7 @@ try {
   await page.evaluate(alarm => {
     localStorage.removeItem('active_ring_v1');
     localStorage.removeItem('snoozed_alarm_v1');
-    localStorage.setItem('alarms_v1', JSON.stringify([alarm]));
+    localStorage.setItem(window.__scoped('alarms_v1'), JSON.stringify([alarm]));
   }, makeAlarm({
     id: 'e2e-snooze',
     ...dueTime,
@@ -538,7 +590,7 @@ try {
   await page.evaluate(alarm => {
     localStorage.removeItem('active_ring_v1');
     localStorage.removeItem('snoozed_alarm_v1');
-    localStorage.setItem('alarms_v1', JSON.stringify([alarm]));
+    localStorage.setItem(window.__scoped('alarms_v1'), JSON.stringify([alarm]));
   }, makeAlarm({
     id: 'e2e-just-saved',
     ...dueTime,
@@ -562,7 +614,7 @@ try {
   // ---- creating an alarm through the UI --------------------------------
   // The whole feature depends on this journey, and nothing had exercised it.
   await page.evaluate(() => {
-    localStorage.removeItem('alarms_v1');
+    localStorage.removeItem(window.__scoped('alarms_v1'));
     localStorage.removeItem('active_ring_v1');
     localStorage.removeItem('snoozed_alarm_v1');
     location.hash = '#/';
@@ -597,7 +649,7 @@ try {
   check('saving returns to the home screen', page.url().endsWith('#/'), page.url());
 
   const created = await page.evaluate(() => {
-    const raw = JSON.parse(localStorage.getItem('alarms_v1') || '[]');
+    const raw = JSON.parse(localStorage.getItem(window.__scoped('alarms_v1')) || '[]');
     return raw[0] ?? null;
   });
   check(
@@ -621,7 +673,7 @@ try {
 
   // ---- persistence ------------------------------------------------------
   // Checked here, before the delete scenario empties the store on purpose.
-  const persisted = await page.evaluate(() => localStorage.getItem('alarms_v1'));
+  const persisted = await page.evaluate(() => localStorage.getItem(window.__scoped('alarms_v1')));
   check(
     'alarms persist in localStorage',
     !!persisted && persisted.includes('E2E 新建'),
@@ -632,7 +684,7 @@ try {
   // 删除 sits right beside 测试 in the card, so on a phone the first tap must
   // not destroy anything.
   const alarmCount = () =>
-    page.evaluate(() => JSON.parse(localStorage.getItem('alarms_v1') || '[]').length);
+    page.evaluate(() => JSON.parse(localStorage.getItem(window.__scoped('alarms_v1')) || '[]').length);
 
   await page.getByRole('button', { name: /删除/ }).first().click();
   const confirmDialog = page.getByRole('alertdialog');
@@ -659,7 +711,7 @@ try {
   // Never covered before, and this round moved its duration maths.
   await page.evaluate(() => {
     const now = Date.now();
-    localStorage.setItem('sessions_v1', JSON.stringify([
+    localStorage.setItem(window.__scoped('sessions_v1'), JSON.stringify([
       { alarmId: 'a', startedAt: now - 90_000, completedAt: now - 30_000, interruptCount: 2, taskType: 'shake', difficulty: 'medium', success: true },
       { alarmId: 'b', startedAt: now - 20_000, completedAt: now - 10_000, interruptCount: 0, taskType: 'steps', difficulty: 'hard', success: true },
     ]));
@@ -729,6 +781,7 @@ try {
     ...devices['Pixel 5'],
     ignoreHTTPSErrors: true,
   });
+  await noNotifyContext.addInitScript(SCOPED_HELPER);
   await noNotifyContext.addInitScript(() => {
     // eslint-disable-next-line no-undef
     delete window.Notification;
@@ -738,8 +791,9 @@ try {
   try {
     await noNotifyPage.goto(HASH, { waitUntil: 'load' });
     await noNotifyPage.waitForSelector('#root > *', { timeout: 15_000 });
+    await signUp(noNotifyPage, '无通知测试');
     await noNotifyPage.evaluate(alarm => {
-      localStorage.setItem('alarms_v1', JSON.stringify([alarm]));
+      localStorage.setItem(window.__scoped('alarms_v1'), JSON.stringify([alarm]));
     }, makeAlarm({ id: 'e2e-no-notify' }));
     await noNotifyPage.reload({ waitUntil: 'load' });
     await noNotifyPage.waitForSelector('#root > *');
@@ -763,6 +817,75 @@ try {
     await noNotifyContext.close();
   }
 
+  // ---- accounts: logout, log back in, and isolation ---------------------
+  await page.goto(`${HASH}#/`, { waitUntil: 'load' });
+  await page.waitForSelector('text=环境自检', { timeout: 15_000 });
+
+  const accountId = await page.evaluate(() => {
+    const session = JSON.parse(localStorage.getItem('auth_session_v1') || 'null');
+    return session?.userId ?? null;
+  });
+  check('the session records which account is signed in', !!accountId, String(accountId));
+
+  await page.evaluate(alarm => {
+    localStorage.setItem(window.__scoped('alarms_v1'), JSON.stringify([alarm]));
+  }, makeAlarm({ id: 'e2e-isolation', label: '隔离测试' }));
+  await page.reload({ waitUntil: 'load' });
+  await page.waitForSelector('text=隔离测试', { timeout: 15_000 });
+
+  const signOut = async () => {
+    await page.getByRole('button', { name: '退出账号' }).click();
+    await page.getByRole('alertdialog').getByRole('button', { name: '退出' }).click();
+    await page.waitForSelector('text=本机账号', { timeout: 15_000 });
+  };
+
+  await signOut();
+  check('logging out returns to the account screen', true);
+  check(
+    'and the account keeps its alarms while signed out',
+    await page.evaluate(
+      id => {
+        const raw = localStorage.getItem(`alarms_v1::${id}`);
+        return !!raw && JSON.parse(raw).length === 1;
+      },
+      accountId
+    )
+  );
+
+  await page.getByPlaceholder(/2~16/).fill('E2E测试');
+  await page.getByPlaceholder(/至少 6 位/).fill('e2epassword');
+  await page.locator('button[type="submit"]').click();
+  await page.waitForSelector('text=隔离测试', { timeout: 15_000 });
+  check("signing back in restores that profile's alarms", true);
+
+  // A second account must start empty rather than inherit the first one's data.
+  await signOut();
+  await page.getByRole('button', { name: '注册', exact: true }).click();
+  await page.getByPlaceholder(/2~16/).fill('E2E二号');
+  await page.getByPlaceholder(/至少 6 位/).fill('secondpass');
+  await page.locator('button[type="submit"]').click();
+  await page.waitForSelector('text=环境自检', { timeout: 15_000 });
+
+  const secondText = await page.evaluate(() => document.body.innerText);
+  check(
+    "a second account starts empty, not with the first one's alarms",
+    secondText.includes('还没有闹钟') && !secondText.includes('隔离测试'),
+    secondText.replace(/\s+/g, ' ').slice(0, 90)
+  );
+
+  // The wrong password must not open the first account.
+  await signOut();
+  await page.getByPlaceholder(/2~16/).fill('E2E测试');
+  await page.getByPlaceholder(/至少 6 位/).fill('wrongpassword');
+  await page.locator('button[type="submit"]').click();
+  await page.waitForTimeout(1000);
+  const wrongText = await page.evaluate(() => document.body.innerText);
+  check(
+    'a wrong password is refused',
+    wrongText.includes('昵称或密码不对') && !wrongText.includes('环境自检'),
+    wrongText.replace(/\s+/g, ' ').slice(0, 90)
+  );
+
   // ---- notification channel over a trustworthy origin -------------------
   // Chrome treats http://127.0.0.1 as a secure context, which makes this the
   // only place the service worker can register without a real certificate. The
@@ -773,6 +896,7 @@ try {
     ...devices['Pixel 5'],
     permissions: ['notifications'],
   });
+  await notifyContext.addInitScript(SCOPED_HELPER);
   const notifyPage = await notifyContext.newPage();
 
   try {
@@ -789,6 +913,9 @@ try {
       );
     } else {
       await notifyPage.waitForSelector('#root > *', { timeout: 15_000 });
+      // A different origin means a different, empty localStorage, so this
+      // context always starts signed out.
+      await signUp(notifyPage, '通知测试');
 
       check(
         'a loopback origin counts as a secure context',
@@ -816,7 +943,7 @@ try {
 
       await notifyPage.evaluate(alarm => {
         localStorage.removeItem('active_ring_v1');
-        localStorage.setItem('alarms_v1', JSON.stringify([alarm]));
+        localStorage.setItem(window.__scoped('alarms_v1'), JSON.stringify([alarm]));
       }, makeAlarm({ id: 'e2e-notify', ...dueTime }));
       await notifyPage.reload({ waitUntil: 'load' });
       await notifyPage.waitForSelector('text=开始任务', { timeout: 20_000 });
